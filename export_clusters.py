@@ -43,13 +43,17 @@ def load_selected_channels(spike_times_path, spike_clusters_path, channels):
 
     selected_spikes = {}
     for channel in channels:
-        channel = int(channel)
-        spikes = spike_times[spike_clusters == channel]
-        if len(spikes) > 0:
-            selected_spikes[channel] = spikes
-            print(f"Channel {channel}: Loaded {len(spikes)} spikes")
-        else:
-            print(f"Channel {channel} has no spikes and will be skipped.")
+        if channel.strip():  # Ensures channel is not an empty string
+            try:
+                channel = int(channel)
+                spikes = spike_times[spike_clusters == channel]
+                if len(spikes) > 0:
+                    selected_spikes[channel] = spikes
+                    print(f"Channel {channel}: Loaded {len(spikes)} spikes")
+                else:
+                    print(f"Channel {channel} has no spikes and will be skipped.")
+            except ValueError:
+                print(f"Invalid channel: {channel}. Skipping.")
 
     sample_rate = 30000  # Neuropixels sample rate (Hz)
     max_time = np.max(spike_times) / sample_rate if len(spike_times) > 0 else 0
@@ -125,15 +129,12 @@ def calculate_firing_rate(data_export, bin_size, max_time):
     if bins[-1] > max_time:
         bins = bins[:-1]  # Exclude last bin if it's incomplete
         bin_times = bin_times[:-1]  # Also adjust bin_times to match
-
+   
     firing_rates = {'Bin_Time_s': bin_times}
 
     for channel, spikes in data_export.items():
-
         spikes_in_seconds = spikes / 1000
-
         counts, _ = np.histogram(spikes_in_seconds, bins=bins)
-
         firing_rate = counts / bin_size
         firing_rates[channel] = firing_rate
         print(
@@ -161,7 +162,6 @@ def export_firing_rate_html(firing_rate_df, images_export_dir, bin_size, drug_ti
                 x0=drug_time,
                 y0=0,
                 x1=drug_time,
-                # Slightly above max firing rate
                 y1=max(firing_rate_df[channel]) * 1.1,
                 line=dict(color="red", width=2, dash="dash"),
             )
