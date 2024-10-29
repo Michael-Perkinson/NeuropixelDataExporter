@@ -120,7 +120,7 @@ def extract_data(selected_spikes, drug_time, start_time, end_time, sample_rate):
 def calculate_firing_rate(data_export, bin_size, max_time):
     """Calculates firing rates for each cluster in specified bin size (in seconds), with options for handling incomplete bins."""
     bins = np.arange(0, max_time + bin_size, bin_size)
-    bin_times = bins[:-1] 
+    bin_times = bins[:-1]
 
     if bins[-1] > max_time:
         bins = bins[:-1]  # Exclude last bin if it's incomplete
@@ -129,11 +129,11 @@ def calculate_firing_rate(data_export, bin_size, max_time):
     firing_rates = {'Bin_Time_s': bin_times}
 
     for channel, spikes in data_export.items():
-        
-        spikes_in_seconds = spikes / 1000  
-  
+
+        spikes_in_seconds = spikes / 1000
+
         counts, _ = np.histogram(spikes_in_seconds, bins=bins)
-        
+
         firing_rate = counts / bin_size
         firing_rates[channel] = firing_rate
         print(
@@ -151,8 +151,8 @@ def export_firing_rate_html(firing_rate_df, images_export_dir, bin_size, drug_ti
             x=bin_times,
             y=firing_rate_df[channel],
             name=f"Cluster {channel}",
-            marker_color='black',        
-            marker_line_width=0          
+            marker_color='black',
+            marker_line_width=0
         ))
         # Add red dashed line at drug application time if provided
         if drug_time is not None:
@@ -176,13 +176,14 @@ def export_firing_rate_html(firing_rate_df, images_export_dir, bin_size, drug_ti
             )
 
         fig.update_layout(
-            title=f"Firing Rate Histogram for Cluster {channel} (Bin Size: {bin_size}s)",
+            title=f"Firing Rate Histogram for Cluster {
+                channel} (Bin Size: {bin_size}s)",
             xaxis_title="Time (s)",
             yaxis_title="Firing Rate (Hz)",
             plot_bgcolor='white',
-            bargap=0,              
+            bargap=0,
             xaxis=dict(
-                showline=True,    
+                showline=True,
                 linecolor='black',
                 showgrid=False
             ),
@@ -193,7 +194,7 @@ def export_firing_rate_html(firing_rate_df, images_export_dir, bin_size, drug_ti
                 ticks='outside',
                 tickwidth=2,
                 tickcolor='black',
-                ticklen=6 
+                ticklen=6
             )
         )
 
@@ -237,7 +238,8 @@ def export_data(data_export, folder_path, bin_size, max_time, drug_time):
 
         images_export_dir = os.path.join(export_dir, 'firing_rate_images')
         os.makedirs(images_export_dir, exist_ok=True)
-        export_firing_rate_html(firing_rate_df, images_export_dir, bin_size, drug_time)
+        export_firing_rate_html(
+            firing_rate_df, images_export_dir, bin_size, drug_time)
 
 
 def main():

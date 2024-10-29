@@ -22,6 +22,12 @@ This script allows you to select specific clusters, filter spike times based on 
    cd NeuropixelDataExporter
    ```
 
+   Or download and unzip directly from the link and path to the folder
+
+   ```bash
+   cd /path/to/your/directory/
+   ```
+
 2. **Create Virtual Environment**  
    It’s recommended to use a virtual environment to manage dependencies. Run the following command to create one, naming it `export_env` for easy identification:
 
