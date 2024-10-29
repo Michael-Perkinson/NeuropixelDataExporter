@@ -11,11 +11,10 @@ def file_chooser():
     root = tk.Tk()
     root.withdraw()  # Hide the root window
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.join(script_dir, 'data')
 
     folder_path = filedialog.askdirectory(
-        initialdir=data_dir,
-        title="Select a folder within 'data' containing the required files"
+        initialdir=script_dir,
+        title="Select a folder containing the required files"
     )
 
     if not folder_path:
