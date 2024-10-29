@@ -142,7 +142,7 @@ def calculate_firing_rate(data_export, bin_size, max_time):
     return pd.DataFrame(firing_rates)
 
 
-def export_firing_rate_html(firing_rate_df, images_export_dir, bin_size):
+def export_firing_rate_html(firing_rate_df, images_export_dir, bin_size, drug_time=None):
     """Creates and exports interactive HTML plots for each cluster's firing rate with bin size in title and file name."""
     bin_times = firing_rate_df['Bin_Time_s']
     for channel in firing_rate_df.columns[1:]:
@@ -154,6 +154,26 @@ def export_firing_rate_html(firing_rate_df, images_export_dir, bin_size):
             marker_color='black',        
             marker_line_width=0          
         ))
+        # Add red dashed line at drug application time if provided
+        if drug_time is not None:
+            fig.add_shape(
+                type="line",
+                x0=drug_time,
+                y0=0,
+                x1=drug_time,
+                # Slightly above max firing rate
+                y1=max(firing_rate_df[channel]) * 1.1,
+                line=dict(color="red", width=2, dash="dash"),
+            )
+            fig.add_annotation(
+                x=drug_time,
+                y=max(firing_rate_df[channel]) * 1.1,
+                text="Drug Application",
+                showarrow=True,
+                arrowhead=2,
+                ax=0,
+                ay=-20
+            )
 
         fig.update_layout(
             title=f"Firing Rate Histogram for Cluster {channel} (Bin Size: {bin_size}s)",
@@ -184,7 +204,7 @@ def export_firing_rate_html(firing_rate_df, images_export_dir, bin_size):
             f"Interactive firing rate HTML for Channel {channel} saved to {html_path}")
 
 
-def export_data(data_export, folder_path, bin_size, max_time):
+def export_data(data_export, folder_path, bin_size, max_time, drug_time):
     """Exports the filtered spike times and firing rates to structured CSV files."""
     base_folder_name = os.path.basename(folder_path)
     analysis_folder_name = f"{base_folder_name}_analysed"
@@ -217,7 +237,7 @@ def export_data(data_export, folder_path, bin_size, max_time):
 
         images_export_dir = os.path.join(export_dir, 'firing_rate_images')
         os.makedirs(images_export_dir, exist_ok=True)
-        export_firing_rate_html(firing_rate_df, images_export_dir, bin_size)
+        export_firing_rate_html(firing_rate_df, images_export_dir, bin_size, drug_time)
 
 
 def main():
@@ -250,7 +270,7 @@ def main():
         selected_spikes, drug_time, start_time, end_time, sample_rate)
 
     # Step 4: Export data including firing rates
-    export_data(data_export, folder_path, bin_size, max_time)
+    export_data(data_export, folder_path, bin_size, max_time, drug_time)
 
 
 if __name__ == "__main__":
