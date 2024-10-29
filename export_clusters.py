@@ -44,7 +44,7 @@ def load_selected_channels(spike_times_path, spike_clusters_path, channels):
 
     selected_spikes = {}
     for channel in channels:
-        channel = int(channel)  # Convert channel to integer
+        channel = int(channel)
         spikes = spike_times[spike_clusters == channel]
         if len(spikes) > 0:
             selected_spikes[channel] = spikes
@@ -99,17 +99,16 @@ def extract_data(selected_spikes, drug_time, start_time, end_time, sample_rate):
     """Filters spike times by start and end times and adjusts relative to drug application."""
     data_export = {}
     for channel, spikes in selected_spikes.items():
-        # Convert spikes to seconds
+
         spikes_in_seconds = spikes / sample_rate
-        # Filter spikes by time range
+
         filtered_spikes = spikes_in_seconds[(
             spikes_in_seconds >= start_time) & (spikes_in_seconds <= end_time)]
-        # Convert to ms relative to drug time if drug time is provided
+
         if drug_time is not None:
             relative_spikes_ms = (filtered_spikes - drug_time) * 1000
             relative_spikes_ms = relative_spikes_ms[relative_spikes_ms >= 0]
         else:
-            # Convert to ms without drug adjustment
             relative_spikes_ms = filtered_spikes * 1000
 
         data_export[channel] = relative_spikes_ms
@@ -121,11 +120,9 @@ def extract_data(selected_spikes, drug_time, start_time, end_time, sample_rate):
 
 def calculate_firing_rate(data_export, bin_size, max_time):
     """Calculates firing rates for each cluster in specified bin size (in seconds), with options for handling incomplete bins."""
-    # Define bin edges from 0 to max_time with the specified bin size
     bins = np.arange(0, max_time + bin_size, bin_size)
-    bin_times = bins[:-1]  # Use the start of each bin for labeling
+    bin_times = bins[:-1] 
 
-    # Check if last bin is incomplete (e.g., not enough data)
     if bins[-1] > max_time:
         bins = bins[:-1]  # Exclude last bin if it's incomplete
         bin_times = bin_times[:-1]  # Also adjust bin_times to match
@@ -133,11 +130,11 @@ def calculate_firing_rate(data_export, bin_size, max_time):
     firing_rates = {'Bin_Time_s': bin_times}
 
     for channel, spikes in data_export.items():
-        # Convert spike times to seconds
-        spikes_in_seconds = spikes / 1000  # Convert ms to seconds for binning
-        # Count spikes in each bin
+        
+        spikes_in_seconds = spikes / 1000  
+  
         counts, _ = np.histogram(spikes_in_seconds, bins=bins)
-        # Calculate firing rate as spikes per second
+        
         firing_rate = counts / bin_size
         firing_rates[channel] = firing_rate
         print(
@@ -149,39 +146,38 @@ def calculate_firing_rate(data_export, bin_size, max_time):
 def export_firing_rate_html(firing_rate_df, images_export_dir, bin_size):
     """Creates and exports interactive HTML plots for each cluster's firing rate with bin size in title and file name."""
     bin_times = firing_rate_df['Bin_Time_s']
-    for channel in firing_rate_df.columns[1:]:  # Skip 'Bin_Time_s' column
+    for channel in firing_rate_df.columns[1:]:
         fig = go.Figure()
         fig.add_trace(go.Bar(
             x=bin_times,
             y=firing_rate_df[channel],
             name=f"Cluster {channel}",
-            marker_color='black',        # Set bar color to black
-            marker_line_width=0          # No border on bars
+            marker_color='black',        
+            marker_line_width=0          
         ))
 
         fig.update_layout(
             title=f"Firing Rate Histogram for Cluster {channel} (Bin Size: {bin_size}s)",
             xaxis_title="Time (s)",
             yaxis_title="Firing Rate (Hz)",
-            plot_bgcolor='white',       # Set background to white
-            bargap=0,                   # No gaps between bars
+            plot_bgcolor='white',
+            bargap=0,              
             xaxis=dict(
-                showline=True,          # Show x-axis line
-                linecolor='black',      # Set x-axis line color
-                showgrid=False          # Hide x-axis grid lines
+                showline=True,    
+                linecolor='black',
+                showgrid=False
             ),
             yaxis=dict(
-                showline=True,          # Show y-axis line
-                linecolor='black',      # Set y-axis line color
-                showgrid=False,         # Hide grid lines across the plot
-                ticks='outside',        # Set ticks to appear outside
-                tickwidth=2,            # Width of the ticks
-                tickcolor='black',      # Tick color
-                ticklen=6               # Length of the ticks
+                showline=True,
+                linecolor='black',
+                showgrid=False,
+                ticks='outside',
+                tickwidth=2,
+                tickcolor='black',
+                ticklen=6 
             )
         )
 
-        # File name includes the bin size
         html_path = os.path.join(
             images_export_dir, f"Firing_Rate_Cluster_{channel}_BinSize_{bin_size}s.html")
         fig.write_html(html_path)
@@ -191,7 +187,6 @@ def export_firing_rate_html(firing_rate_df, images_export_dir, bin_size):
 
 def export_data(data_export, folder_path, bin_size, max_time):
     """Exports the filtered spike times and firing rates to structured CSV files."""
-    # Extract the base folder name and create a unique export directory
     base_folder_name = os.path.basename(folder_path)
     analysis_folder_name = f"{base_folder_name}_analysed"
     export_dir = os.path.join(
@@ -215,14 +210,12 @@ def export_data(data_export, folder_path, bin_size, max_time):
         export_df.to_csv(csv_path, index=False)
         print(f"Spike times exported to {csv_path}")
 
-        # Calculate firing rates and export to CSV
         firing_rate_df = calculate_firing_rate(data_export, bin_size, max_time)
         firing_rate_csv_path = os.path.join(
             export_dir, "firing_rates_by_cluster.csv")
         firing_rate_df.to_csv(firing_rate_csv_path, index=False)
         print(f"Firing rates exported to {firing_rate_csv_path}")
 
-        # Generate and save firing rate HTML plots
         images_export_dir = os.path.join(export_dir, 'firing_rate_images')
         os.makedirs(images_export_dir, exist_ok=True)
         export_firing_rate_html(firing_rate_df, images_export_dir, bin_size)
