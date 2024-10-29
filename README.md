@@ -18,7 +18,7 @@ This script allows you to select specific clusters, filter spike times based on 
    First, clone this repository to your local machine:
 
     ```bash
-   git clone https://github.com/yourusername/NeuropixelDataExporter.git
+   git clone https://github.com/Michael-Perkinson/NeuropixelDataExporter.git
    cd NeuropixelDataExporter
    ```
 
