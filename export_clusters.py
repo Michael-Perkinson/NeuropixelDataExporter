@@ -11,7 +11,7 @@ import openpyxl
 def file_chooser():
     """
     Prompts the user to select a folder within the current script's directory.
-    
+
     Returns:
         str or None: The path to the selected folder, or None if no folder is selected.
     """
@@ -35,7 +35,7 @@ def file_chooser():
 def read_npy_file(file_path):
     """
     Reads a .npy file from the specified file path.
-    
+
     Parameters:
         file_path (str): Path to the .npy file.
 
@@ -106,7 +106,7 @@ def channels_to_export():
 def drug_application_time():
     """
     Prompts the user to enter the drug application time in seconds or skip if not provided.
-    
+
     Returns:
         float or None: The entered drug application time in seconds, or None if skipped or invalid.
     """
@@ -122,7 +122,7 @@ def drug_application_time():
 def start_and_end_time(max_time):
     """
     Prompts the user to enter start and end times for a plot, defaulting to the full range if omitted.
-    
+
     Parameters:
         max_time (float): The maximum allowable time for the end of the plot.
 
@@ -132,8 +132,8 @@ def start_and_end_time(max_time):
     try:
         start_time = input(
             "Enter the start time of the plot (s), or press Enter to start from 0: ")
-        end_time = input(f"Enter the end time of the plot (s), or press Enter to go to {
-                         max_time:.2f} s: ")
+        end_time = input(f"""Enter the end time of the plot (s),
+            or press Enter to go to {max_time:.2f} s: """)
         start_time = float(start_time) if start_time else 0.0
         end_time = float(end_time) if end_time else max_time
         print(f"Start time: {start_time}s, End time: {end_time}s")
@@ -146,7 +146,7 @@ def start_and_end_time(max_time):
 def extract_data(selected_spikes, drug_time, start_time, end_time, sample_rate):
     """
     Filters spike times by specified start and end times, adjusting relative to drug application if provided.
-    
+
     Parameters:
         selected_spikes (dict): Dictionary with channels as keys and spike times as values.
         drug_time (float or None): The time of drug application in seconds, or None if not applicable.
@@ -283,7 +283,7 @@ def calculate_hazard_function(isi_df, early_time=0.07, late_time_start=0.41, lat
 def export_firing_rate_html(firing_rate_df, images_export_dir, bin_size, drug_time=None):
     """
     Creates and exports interactive HTML plots for each cluster's firing rate with bin size in title and file name.
-    
+
     Parameters:
         firing_rate_df (pd.DataFrame): DataFrame containing bin times and firing rates for each channel.
         images_export_dir (str): Directory to save the HTML files.
@@ -341,7 +341,7 @@ def export_data(data_export, folder_path, bin_size, max_time, drug_time):
     """
     Exports filtered spike times and firing rates to structured CSV files, individual text files for each cluster, 
     and HTML plots.
-    
+
     Parameters:
         data_export (dict): Dictionary of spike times per channel.
         folder_path (str): Base folder path for exporting data.
@@ -403,7 +403,7 @@ def export_data(data_export, folder_path, bin_size, max_time, drug_time):
 def export_hazard_excel(folder_path, export_dir, hazard_df, hazard_summary_df, isi_df):
     """
     Exports hazard function data, summary metrics, and ISI data to a single Excel file.
-    
+
     Parameters:
         folder_path (str): Path where the Excel file will be saved.
         export_dir (str): Directory for exporting the Excel file.
