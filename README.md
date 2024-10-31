@@ -3,6 +3,8 @@
 
 Neuropixel Data Exporter is a tool for analyzing and exporting Neuropixel spike data, post-Kilosort processing. This script enables users to select specific clusters, calculate firing rates, ISI histograms, and hazard functions, and export results in structured formats.
 
+**Note**: If you download a new version of the script, remember to re-run pip install -r requirements.txt in the export_env to ensure all dependencies are up-to-date.
+
 ## Features
 
 - **Cluster Selection**: Choose specific clusters for analysis.
