@@ -339,7 +339,8 @@ def export_firing_rate_html(firing_rate_df, images_export_dir, bin_size, drug_ti
 
 def export_data(data_export, folder_path, bin_size, max_time, drug_time):
     """
-    Exports filtered spike times and firing rates to structured CSV files and HTML plots.
+    Exports filtered spike times and firing rates to structured CSV files, individual text files for each cluster, 
+    and HTML plots.
     
     Parameters:
         data_export (dict): Dictionary of spike times per channel.
@@ -360,6 +361,7 @@ def export_data(data_export, folder_path, bin_size, max_time, drug_time):
                    times in data_export.items() if len(times) > 0}
 
     if data_export:
+        # Create overall CSV with padded spike times for all clusters
         max_length = max(len(times) for times in data_export.values())
         export_df = pd.DataFrame({
             channel: np.pad(times, (0, max_length - len(times)),
@@ -370,11 +372,26 @@ def export_data(data_export, folder_path, bin_size, max_time, drug_time):
             export_dir, "spike_times_by_cluster_time_ms.csv"), index=False)
         print(f"Spike times exported to {export_dir}")
 
+        # Create folder for individual text files
+        txt_export_dir = os.path.join(
+            export_dir, 'txt_files_for_clampfit_import')
+        os.makedirs(txt_export_dir, exist_ok=True)
+
+        # Export each cluster's spike times as a separate text file
+        for channel, times in data_export.items():
+            txt_file_path = os.path.join(
+                txt_export_dir, f"spike_times_cluster_{channel}_time_ms.txt")
+            np.savetxt(txt_file_path, times, fmt='%0.4f')
+        print(f"Individual text files for each cluster saved to {
+              txt_export_dir}")
+
+        # Export firing rate data
         firing_rate_df = calculate_firing_rate(data_export, bin_size, max_time)
         firing_rate_df.to_csv(os.path.join(
             export_dir, "firing_rates_by_cluster.csv"), index=False)
         print(f"Firing rates exported to {export_dir}")
 
+        # Generate and export interactive HTML plots
         images_export_dir = os.path.join(export_dir, 'firing_rate_images')
         os.makedirs(images_export_dir, exist_ok=True)
         export_firing_rate_html(
