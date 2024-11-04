@@ -31,40 +31,59 @@ Neuropixel Data Exporter is a tool for analyzing and exporting Neuropixel spike 
    ```
 
 2. **Create a Virtual Environment**  
-   It’s recommended to use a virtual environment to manage dependencies. Run the following command to create one, naming it `export_env`:
+   It’s recommended to use a virtual environment to manage dependencies. Run one of the following commands to create one, naming it `export_env`:
 
-   ```bash
-   python -m venv export_env
-   ```
+   ### Conda Environment Setup
 
-3. **Activate the Virtual Environment**  
-   - On Windows:
+   - Create an environment named `export_env` using Conda:
 
-    ```bash
-    export_env\Scripts\activate
-    ```
+     ```bash
+     conda create -n export_env python=3.8
+     conda activate export_env
+     ```
 
-   - On macOS and Linux:
+   - Install the required dependencies:
 
-    ```bash
-    source export_env/bin/activate
-    ```
+     ```bash
+     pip install -r requirements.txt
+     ```
 
-4. **Install Dependencies**  
-   Use `pip` to install the necessary packages from the requirements file:
+   ### Standard Python (venv) Setup
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+   - Create a virtual environment named `export_env`:
+
+     ```bash
+     python -m venv export_env
+     ```
+
+   - Activate the environment:
+
+     ```bash
+     export_env\Scripts\activate
+     ```
+
+   - Install the required dependencies:
+
+     ```bash
+     pip install -r requirements.txt
+     ```
 
 ## Usage
 
 1. **Activate the Environment**  
-   If you have opened a new terminal since installation, run:
+   Run one of the below codes depending on how you set up your environment:
 
-   ```bash
-   export_env\Scripts\activate
-   ```
+   ### Conda Environment
+
+      ```bash
+      conda activate export_env 
+      ```
+
+   ### Standard Python (venv)
+
+      ```bash
+      export_env\Scripts\activate
+      ```
 
 2. **Run the Script**  
    Start the analysis with:
@@ -97,11 +116,11 @@ This tool provides a streamlined process for analyzing Neuropixel spike data, wi
 
 ## Dependencies
 
-- Python 3.x
+- Python 3.8
 - numpy
 - pandas
 - plotly
 - openpyxl
 - tkinter (for GUI file selection)
 
-Ensure all dependencies are installed to run the script successfully.
+Ensure all dependencies are installed from `requirements.txt` to run the script successfully.
