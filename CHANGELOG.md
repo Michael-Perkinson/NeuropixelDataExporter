@@ -1,7 +1,3 @@
----
-siblings_only: True
----
-
 # Changelog
 
 ## [1.2.0] - 2025-01-16

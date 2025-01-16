@@ -14,6 +14,10 @@ Neuropixel Data Exporter is a tool for analyzing and exporting Neuropixel spike 
 - **Delta Firing Rates**: Compute delta firing rates relative to a baseline period, if specified.
 - **Data Export**: Save spike times, firing rates, ISI histograms, and hazard functions as structured CSV files, Excel files, and text files.
 - **Interactive Plots**: Generate HTML plots of firing rates for each cluster with optional drug application markers.
+  
+## What's New
+
+See the detailed update history in the [CHANGELOG.md](CHANGELOG.md).
 
 ## Installation
 
