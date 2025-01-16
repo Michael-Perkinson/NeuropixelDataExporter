@@ -60,7 +60,7 @@ Neuropixel Data Exporter is a tool for analyzing and exporting Neuropixel spike 
    - Activate the environment:
 
      ```bash
-     export_env\Scriptsctivate
+     export_env\Scripts\activate
      ```
 
    - Install the required dependencies:
