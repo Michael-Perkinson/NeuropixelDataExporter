@@ -754,6 +754,9 @@ def create_firing_rate_dataframes(
     # Create delta DataFrame only with matching columns
     delta_df = None
     if delta_data:
+        # Ensure "Time Intervals (s)" exists in delta_data
+        delta_data["Time Intervals (s)"] = raw_data["Time Intervals (s)"]
+
         delta_sorted_columns = ["Time Intervals (s)"] + [
             col for col in sorted_cluster_columns if col in delta_data
         ]
