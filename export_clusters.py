@@ -71,7 +71,8 @@ def choose_and_validate_folder() -> dict[str, str]:
 
         # Find required files in the selected folder
         file_paths = find_specific_files_in_folder(folder_path, REQUIRED_FILES)
-        missing_files = [file for file in REQUIRED_FILES if file not in file_paths]
+        missing_files = [
+            file for file in REQUIRED_FILES if file not in file_paths]
 
         if missing_files:
             print(f"Error: Missing required files: {', '.join(missing_files)}")
@@ -128,22 +129,38 @@ def start_and_end_time(max_time: float) -> tuple[float, float]:
     return start_time, end_time
 
 
-def prompt_for_baseline(max_time: float) -> tuple[float, float] | tuple[None, None]:
+def prompt_for_baseline(max_time: float, min_time: float = 0) -> tuple[float, float] | tuple[None, None]:
     """
     Asks the user if they want to specify a baseline time range.
     Returns (None, None) if no baseline is specified.
     Otherwise returns (baseline_start, baseline_end).
+
+    The minimum baseline time is adjusted if the start time is greater than 0.
     """
-    if (
-        input("Do you want to specify a baseline period? (y/n): ").strip().lower()
-        != "y"
-    ):
+    if input("Do you want to specify a baseline period? (y/n): ").strip().lower() != "y":
         return None, None
 
     try:
-        baseline_start = float(input("Enter baseline start time (s): "))
-        baseline_end = float(input(f"Enter baseline end time (<= {max_time:.2f}s): "))
+        baseline_start = float(
+            input(f"Enter baseline start time (>= {min_time:.2f}s): "))
+        baseline_end = float(
+            input(f"Enter baseline end time (<= {max_time:.2f}s): "))
+
+        # Ensure the baseline start time is greater than or equal to min_time
+        if baseline_start < min_time:
+            print(
+                f"Baseline start time must be >= {min_time:.2f}s. "
+                "Using the minimum time."
+            )
+            baseline_start = min_time
+        if baseline_end > max_time:
+            print(
+                f"Baseline end time must be <= {max_time:.2f}s. "
+                "Using the maximum time."
+            )
+            baseline_end = max_time
         return baseline_start, baseline_end
+
     except ValueError:
         print("Invalid input for baseline times. Skipping baseline.")
         return None, None
@@ -240,7 +257,8 @@ def filter_by_labels(
     Returns:
         np.ndarray: A boolean mask for the selected labels.
     """
-    valid_cluster_ids = np.where(np.isin(group_labels_array, labels_to_include))[0]
+    valid_cluster_ids = np.where(
+        np.isin(group_labels_array, labels_to_include))[0]
     print(
         f"Filtered cluster IDs for labels {
             labels_to_include}: "
@@ -293,7 +311,8 @@ def filter_data(
 
     # Apply label filtering
     if labels_to_include:
-        mask |= filter_by_labels(spike_clusters, group_labels_array, labels_to_include)
+        mask |= filter_by_labels(
+            spike_clusters, group_labels_array, labels_to_include)
 
     # Apply channel filtering
     if channels_to_include:
@@ -422,7 +441,8 @@ def export_data(
     export_dir = create_export_dir(folder_path, analysis_folder_name)
 
     # Filter out clusters with zero spikes
-    data_export = {cid: arr for cid, arr in data_export.items() if len(arr) > 0}
+    data_export = {cid: arr for cid,
+                   arr in data_export.items() if len(arr) > 0}
     if not data_export:
         print("No spikes to export. Exiting.")
         return export_dir
@@ -441,7 +461,8 @@ def export_data(
     with ExcelWriter(xlsx_path) as writer:
         df_raw.to_excel(writer, sheet_name="Firing_Rates_Raw", index=False)
         if df_delta is not None and len(df_delta.columns) > 1:
-            df_delta.to_excel(writer, sheet_name="Delta_from_Baseline", index=False)
+            df_delta.to_excel(
+                writer, sheet_name="Delta_from_Baseline", index=False)
     print(f"Firing rates (raw/delta) exported to {xlsx_path}")
 
     # Export firing rate plots
@@ -542,7 +563,7 @@ def export_firing_rate_html(
 
     print(
         f"Interactive firing rate HTMLs for clusters saved to {
-          images_export_dir}"
+            images_export_dir}"
     )
 
 
@@ -657,7 +678,8 @@ def compute_baseline_firing_rate(
     Returns:
         float: Baseline firing rate (spikes/s).
     """
-    baseline_spikes = spikes[(spikes >= baseline_start) & (spikes <= baseline_end)]
+    baseline_spikes = spikes[(spikes >= baseline_start)
+                             & (spikes <= baseline_end)]
     baseline_duration = baseline_end - baseline_start
     return len(baseline_spikes) / baseline_duration if baseline_duration > 0 else 0.0
 
@@ -725,13 +747,14 @@ def calculate_firing_rate(
 
     return raw_data, delta_data
 
+
 def sort_cluster_columns(cluster_columns: list[str]) -> list[str]:
     """
     Sorts cluster columns numerically based on the cluster ID.
-    
+
     Parameters:
         cluster_columns (list[str]): List of cluster column names.
-        
+
     Returns:
         list[str]: Sorted cluster column names.
     """
@@ -741,6 +764,7 @@ def sort_cluster_columns(cluster_columns: list[str]) -> list[str]:
         key=lambda x: int(x.split("_")[1]),
     )
     return sorted_cluster_columns
+
 
 def create_firing_rate_dataframes(
     raw_data: dict[str, np.ndarray], delta_data: dict[str, np.ndarray] | None
@@ -822,7 +846,6 @@ def calculate_isi_histogram(
     return pd.DataFrame(formatted_columns)
 
 
-
 def export_hazard_excel(
     export_dir: str,
     hazard_df: pd.DataFrame,
@@ -852,7 +875,8 @@ def export_hazard_excel(
     with ExcelWriter(excel_path, engine="xlsxwriter") as writer:
         isi_df.to_excel(writer, sheet_name="ISI_Histogram", index=False)
         hazard_df.to_excel(writer, sheet_name="Hazard_Function", index=False)
-        hazard_summary_df.to_excel(writer, sheet_name="Hazard_Summary", index=False)
+        hazard_summary_df.to_excel(
+            writer, sheet_name="Hazard_Summary", index=False)
 
     print(f"ISI and hazard data exported to {excel_path}")
 
@@ -932,11 +956,14 @@ def compute_hazard_summary(
 
         # Early hazard metrics
         early_mask = bin_starts <= early_time
-        peak_early_hazard = hazard_values[early_mask].max() if early_mask.any() else 0
+        peak_early_hazard = hazard_values[early_mask].max(
+        ) if early_mask.any() else 0
 
         # Late hazard metrics
-        late_mask = (bin_starts >= late_time_start) & (bin_starts <= late_time_end)
-        mean_late_hazard = hazard_values[late_mask].mean() if late_mask.any() else 0
+        late_mask = (bin_starts >= late_time_start) & (
+            bin_starts <= late_time_end)
+        mean_late_hazard = hazard_values[late_mask].mean(
+        ) if late_mask.any() else 0
 
         # Hazard ratio
         hazard_ratio = (
@@ -978,7 +1005,8 @@ def get_user_input(
     channels_to_include, labels_to_include = channels_or_labels_to_export()
 
     # Load raw spike data
-    spike_times, spike_clusters = load_spike_data(spike_times_path, spike_clusters_path)
+    spike_times, spike_clusters = load_spike_data(
+        spike_times_path, spike_clusters_path)
     group_labels_array = create_label_lookup(group_labels_path)
 
     return (
@@ -1019,7 +1047,8 @@ def process_filtered_data(
     )
 
     max_time = (
-        np.max(filtered_spike_times) / 30000 if len(filtered_spike_times) > 0 else 0
+        np.max(filtered_spike_times) /
+        30000 if len(filtered_spike_times) > 0 else 0
     )
     print(f"Recording length: {max_time:.2f}s")
 
@@ -1080,10 +1109,15 @@ def get_user_parameters(
         )
         or 1.0
     )
-    baseline_start, baseline_end = prompt_for_baseline(max_time)
+    if start_time is not None:
+        min_time = start_time
+    if end_time is not None:
+        max_time = end_time
+
+    baseline_start, baseline_end = prompt_for_baseline(max_time, min_time)
     print(
         f"Analyzing data from {start_time}s to {
-          end_time}s with bin size {bin_size}s"
+            end_time}s with bin size {bin_size}s"
     )
     if drug_time:
         print(f"Drug application time: {drug_time:.2f}s")
