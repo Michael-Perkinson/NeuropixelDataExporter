@@ -124,3 +124,7 @@ This tool provides a streamlined process for analyzing Neuropixel spike data, wi
 - tkinter (for GUI file selection)
 
 Ensure all dependencies are installed from `requirements.txt` to run the script successfully.
+
+## License
+
+This project is licensed under the GNU General Public License v3.0. © 2024 Michael Perkinson.
