@@ -7,12 +7,13 @@ Neuropixel Data Exporter is a tool for analyzing and exporting Neuropixel spike 
 
 ## Features
 
-- **Cluster Selection**: Choose specific clusters for analysis.
+- **Cluster Selection**: Choose specific clusters for analysis (can use labels from Phy).
 - **Spike Time Filtering**: Filter spikes based on specified time ranges and drug application time.
 - **Firing Rate Calculation**: Calculate firing rates for each cluster using user-defined time bins.
 - **ISI Histogram & Hazard Function**: Generate ISI histograms and calculate hazard functions with summary metrics.
+- **Delta Firing Rates**: Compute delta firing rates relative to a baseline period, if specified.
 - **Data Export**: Save spike times, firing rates, ISI histograms, and hazard functions as structured CSV files, Excel files, and text files.
-- **Interactive Plots**: Generate HTML plots of firing rates for each cluster.
+- **Interactive Plots**: Generate HTML plots of firing rates for each cluster with optional drug application markers.
 
 ## Installation
 
@@ -59,7 +60,7 @@ Neuropixel Data Exporter is a tool for analyzing and exporting Neuropixel spike 
    - Activate the environment:
 
      ```bash
-     export_env\Scripts\activate
+     export_env\Scriptsctivate
      ```
 
    - Install the required dependencies:
@@ -96,13 +97,15 @@ Neuropixel Data Exporter is a tool for analyzing and exporting Neuropixel spike 
    When prompted, select the folder containing the following files:
    - `spike_times.npy`: Array of spike times in samples.
    - `spike_clusters.npy`: Array of cluster labels corresponding to each spike.
+   - `cluster_group.tsv`: A tab-separated values file containing cluster IDs and their associated group labels, used to map clusters to specific groups for filtering.
 
 4. **Provide Input Parameters**  
    The script will prompt you to enter:
-   - **Clusters to Export**: Enter the clusters you want to analyze (e.g., `5,7,12`).
+   - **Clusters to Export**: Enter the clusters you want to analyze as specific channels (e.g., `5,7,12`) or labels (e.g., `good, mua`). If using labels, it's best to use the custom ones you can make when curating your data in Phy.
    - **Drug Application Time**: Enter the time (in seconds) when the drug was applied, or press Enter to skip.
    - **Start and End Times**: Specify the time range for analysis, or press Enter to analyze the full range.
    - **Bin Size**: Enter the bin size in seconds for firing rate calculation, or press Enter to use the default of 1 second.
+   - **Baseline times**: Enter the start and end times (in seconds) for the baseline period, used to calculate the baseline firing rate for delta firing rate computation.
 
 5. **Outputs**  
    A new folder will be created in the selected data directory containing:
@@ -115,13 +118,6 @@ Neuropixel Data Exporter is a tool for analyzing and exporting Neuropixel spike 
 This tool provides a streamlined process for analyzing Neuropixel spike data, with outputs designed for easy data interpretation and visualization.
 
 ## Dependencies
-
-- Python 3.8
-- numpy
-- pandas
-- plotly
-- openpyxl
-- tkinter (for GUI file selection)
 
 Ensure all dependencies are installed from `requirements.txt` to run the script successfully.
 

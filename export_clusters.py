@@ -1,11 +1,13 @@
-import re
 import os
+import sys
 import tkinter as tk
 from tkinter import filedialog
 import numpy as np
 import pandas as pd
+from pandas import ExcelWriter
 import plotly.graph_objects as go
-import openpyxl
+
+REQUIRED_FILES = ["spike_times.npy", "spike_clusters.npy", "cluster_group.tsv"]
 
 
 def file_chooser() -> str | None:
@@ -20,8 +22,7 @@ def file_chooser() -> str | None:
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
     folder_path = filedialog.askdirectory(
-        initialdir=script_dir,
-        title="Select a folder containing the required files"
+        initialdir=script_dir, title="Select a folder containing the required files"
     )
 
     if not folder_path:
@@ -32,75 +33,51 @@ def file_chooser() -> str | None:
     return folder_path
 
 
-def read_npy_file(file_path: str) -> np.ndarray | None:
+def find_specific_files_in_folder(
+    folder_path: str, file_names: list[str]
+) -> dict[str, str]:
     """
-    Reads a .npy file from the specified file path.
+    Finds specific files in the provided folder.
 
     Parameters:
-        file_path (str): Path to the .npy file.
+        folder_path (str): Path to the folder containing the files.
+        file_names (list): List of file names to search for.
 
     Returns:
-        np.ndarray or None: The loaded data array, or None if no file path is provided.
+        dict: A dictionary mapping file names to their full paths.
     """
-    if file_path:
-        data = np.load(file_path)
-        print(f"Loaded file: {file_path} with shape {data.shape}")
-        return data
-    print("No file selected.")
-    return None
+    file_paths = {}
+    for file in file_names:
+        full_path = os.path.join(folder_path, file)
+        if os.path.exists(full_path):
+            file_paths[file] = full_path
+    return file_paths
 
 
-def load_selected_channels(spike_times_path: str, spike_clusters_path: str, channels: list[int]) -> tuple[dict[int, np.ndarray], int]:
+def choose_and_validate_folder() -> dict[str, str]:
     """
-    Loads spike times and clusters, filtering by selected channels with spikes.
-
-    Parameters:
-        spike_times_path (str): Path to the .npy file containing spike times.
-        spike_clusters_path (str): Path to the .npy file containing spike cluster IDs.
-        channels (list): List of channels to filter.
+    Prompts the user to choose a folder and validates the presence of required files.
+    If required files are missing, prompts the user to pick another folder until valid 
+    files are found or the user cancels.
 
     Returns:
-        dict: A dictionary with channels as keys and spike times as values.
-        int: Sample rate of the recording (Hz).
+        dict[str, str]: A dictionary mapping required file names to their paths.
     """
-    spike_times = read_npy_file(spike_times_path)
-    spike_clusters = read_npy_file(spike_clusters_path)
+    while True:  # Loop until valid files are found or the user cancels
+        folder_path = file_chooser()
+        if not folder_path:
+            print("No folder selected. Exiting.")
+            sys.exit(1)  # Exit the script if the user cancels folder selection
 
-    selected_spikes = {}
-    channels_with_spikes = []
+        # Find required files in the selected folder
+        file_paths = find_specific_files_in_folder(folder_path, REQUIRED_FILES)
+        missing_files = [file for file in REQUIRED_FILES if file not in file_paths]
 
-    for channel in channels:
-        try:
-            channel = int(channel)
-            spikes = spike_times[spike_clusters == channel]
-            if len(spikes) > 0:
-                selected_spikes[channel] = spikes
-                channels_with_spikes.append(channel)
-                print(f"Channel {channel}: Loaded {len(spikes)} spikes")
-            else:
-                print(f"Channel {channel} has no spikes and will be skipped.")
-        except ValueError:
-            print(f"Invalid channel: {channel}. Skipping.")
-
-    sample_rate = 30000  # Neuropixels sample rate (Hz)
-    max_time = np.max(spike_times) / sample_rate if len(spike_times) > 0 else 0
-    print(f"Max spike time in seconds: {max_time:.2f}s")
-    return selected_spikes, sample_rate
-
-
-def channels_to_export() -> list[int]:
-    """
-    Prompts user for channels to export, retaining only numeric identifiers.
-
-    Returns:
-        list: Sorted list of unique numeric channel identifiers.
-    """
-    channels_input = input(
-        "Enter the clusters you want to export (separated by commas): ")
-    channels_cleaned = re.findall(r'\d+', channels_input)
-    channels = sorted(set(int(channel) for channel in channels_cleaned))
-    print(f"Selected channels: {channels}")
-    return channels
+        if missing_files:
+            print(f"Error: Missing required files: {', '.join(missing_files)}")
+            print("Please select another folder or cancel to exit.")
+        else:
+            return file_paths
 
 
 def drug_application_time() -> float | None:
@@ -112,7 +89,8 @@ def drug_application_time() -> float | None:
     """
     try:
         drug_time = input(
-            "Enter the time at which the drug was applied (s), or press Enter to skip: ")
+            "Enter the time at which the drug was applied (s), or press Enter to skip: "
+        )
         return float(drug_time) if drug_time else None
     except ValueError:
         print("Invalid input. Ignoring drug application time.")
@@ -127,337 +105,1012 @@ def start_and_end_time(max_time: float) -> tuple[float, float]:
         max_time (float): The maximum allowable time for the end of the plot.
 
     Returns:
-        tuple: A tuple containing the start and end times in seconds.
+        tuple[float, float]: A tuple containing the start and end times in seconds.
     """
+
+    def parse_input(prompt: str, default: float) -> float:
+        """Helper to parse user input with a default fallback."""
+        value = input(prompt).strip()
+        return float(value) if value else default
+
+    start_time = parse_input(
+        "Enter the start time of the plot (seconds), or press Enter to start from 0: ",
+        0.0,
+    )
+    end_time = parse_input(
+        (
+            f"Enter the end time of the plot (seconds), or press Enter to use "
+            f"{max_time:.2f}: "
+        ),
+        max_time,
+    )
+
+    return start_time, end_time
+
+
+def prompt_for_baseline(max_time: float) -> tuple[float, float] | tuple[None, None]:
+    """
+    Asks the user if they want to specify a baseline time range.
+    Returns (None, None) if no baseline is specified.
+    Otherwise returns (baseline_start, baseline_end).
+    """
+    if (
+        input("Do you want to specify a baseline period? (y/n): ").strip().lower()
+        != "y"
+    ):
+        return None, None
+
     try:
-        start_time = input(
-            "Enter the start time of the plot (s), or press Enter to start from 0: ")
-        end_time = input(f"""Enter the end time of the plot (s),
-            or press Enter to go to {max_time:.2f} s: """)
-        start_time = float(start_time) if start_time else 0.0
-        end_time = float(end_time) if end_time else max_time
-        print(f"Start time: {start_time}s, End time: {end_time}s")
-        return start_time, end_time
+        baseline_start = float(input("Enter baseline start time (s): "))
+        baseline_end = float(input(f"Enter baseline end time (<= {max_time:.2f}s): "))
+        return baseline_start, baseline_end
     except ValueError:
-        print("Invalid input. Using default time range.")
-        return 0.0, max_time
+        print("Invalid input for baseline times. Skipping baseline.")
+        return None, None
 
 
-def extract_data(selected_spikes: dict[int, np.ndarray], drug_time: float | None, start_time: float, end_time: float, sample_rate: int) -> dict[int, np.ndarray]:
+def channels_or_labels_to_export() -> tuple[list[int], list[str]]:
     """
-    Filters spike times by specified start and end times, adjusting relative to drug application if provided.
-
-    Parameters:
-        selected_spikes (dict): Dictionary with channels as keys and spike times as values.
-        drug_time (float or None): The time of drug application in seconds, or None if not applicable.
-        start_time (float): Start time for filtering in seconds.
-        end_time (float): End time for filtering in seconds.
-        sample_rate (int): Sampling rate in Hz.
+    Prompts user for channels or labels to export and parses the input.
 
     Returns:
-        dict: Dictionary with channels as keys and filtered, adjusted spike times in milliseconds as values.
+        tuple[list[int], list[str]]: A tuple containing:
+            - A sorted list of unique integer channel identifiers.
+            - A sorted list of unique group labels (strings).
     """
-    data_export = {}
-    for channel, spikes in selected_spikes.items():
-        spikes_in_seconds = spikes / sample_rate
-        filtered_spikes = spikes_in_seconds[(
-            spikes_in_seconds >= start_time) & (spikes_in_seconds <= end_time)]
+    user_input = input(
+        "Enter the channels or labels you want to export (separated by commas): "
+    ).strip()
 
+    # Parse input into a list of cleaned strings
+    inputs = [item.strip() for item in user_input.split(",") if item.strip()]
+
+    # Separate numeric channels and text labels
+    channels = sorted({int(item) for item in inputs if item.isdigit()})
+    labels = sorted({item for item in inputs if not item.isdigit()})
+
+    # Provide clear feedback to the user
+    if channels:
+        print(f"Selected channels: {channels}")
+    else:
+        print("No numeric channels were selected.")
+
+    if labels:
+        print(f"Selected labels: {labels}")
+    else:
+        print("No group labels were selected.")
+
+    return channels, labels
+
+
+def load_spike_data(
+    spike_times_path: str, spike_clusters_path: str
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Loads spike times and spike cluster data from .npy files.
+
+    Parameters:
+        spike_times_path (str): Path to the .npy file containing spike times.
+        spike_clusters_path (str): Path to the .npy file containing spike cluster IDs.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: A tuple containing:
+            - spike_times: Array of spike times.
+            - spike_clusters: Array of spike cluster IDs.
+    """
+    return np.load(spike_times_path).ravel(), np.load(spike_clusters_path).ravel()
+
+
+def create_label_lookup(group_labels_path: str) -> np.ndarray:
+    """
+    Creates a label lookup array that maps cluster IDs to group labels.
+
+    Parameters:
+        group_labels_path (str): Path to the .tsv file containing cluster IDs and group labels.
+            The file should have columns:
+            - "cluster_id": Integer IDs of clusters.
+            - "group": Corresponding group labels for each cluster.
+
+    Returns:
+        np.ndarray: An array where each index corresponds to a cluster ID and its value is the group label.
+                    Unmapped indices are labeled as "unknown".
+    """
+    cluster_group = pd.read_csv(group_labels_path, sep="\t")
+    max_cluster_id = cluster_group["cluster_id"].max() + 1
+    group_labels_array = np.full(max_cluster_id, "unknown", dtype=object)
+    group_labels_array[cluster_group["cluster_id"].values] = cluster_group[
+        "group"
+    ].values
+    return group_labels_array
+
+
+def filter_by_labels(
+    spike_clusters: np.ndarray,
+    group_labels_array: np.ndarray,
+    labels_to_include: list[str],
+) -> np.ndarray:
+    """
+    Creates a mask for filtering by group labels.
+
+    Parameters:
+        spike_clusters (np.ndarray): Array of spike cluster IDs.
+        group_labels_array (np.ndarray): Array mapping cluster IDs to group labels.
+        labels_to_include (list[str]): List of group labels to include.
+
+    Returns:
+        np.ndarray: A boolean mask for the selected labels.
+    """
+    valid_cluster_ids = np.where(np.isin(group_labels_array, labels_to_include))[0]
+    print(
+        f"Filtered cluster IDs for labels {
+            labels_to_include}: "
+        f"{valid_cluster_ids}"
+    )
+    return np.isin(spike_clusters, valid_cluster_ids)
+
+
+def filter_by_channels(
+    spike_clusters: np.ndarray, channels_to_include: list[int]
+) -> np.ndarray:
+    """
+    Creates a mask for filtering by channel IDs.
+
+    Parameters:
+        spike_clusters (np.ndarray): Array of spike cluster IDs.
+        channels_to_include (list[int]): List of channel IDs to include.
+
+    Returns:
+        np.ndarray: A boolean mask for the selected channels.
+    """
+    return np.isin(spike_clusters, channels_to_include)
+
+
+def filter_data(
+    spike_times: np.ndarray,
+    spike_clusters: np.ndarray,
+    group_labels_array: np.ndarray,
+    labels_to_include: list[str] = None,
+    channels_to_include: list[int] = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Filters spike data by user-specified labels and/or channels.
+
+    Parameters:
+        spike_times (np.ndarray): Array of spike times.
+        spike_clusters (np.ndarray): Array of spike cluster IDs.
+        group_labels_array (np.ndarray): Array mapping cluster IDs to group labels.
+        labels_to_include (list[str], optional): List of group labels to include.
+        channels_to_include (list[int], optional): List of channel IDs to include.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray, np.ndarray]: A tuple containing:
+            - filtered_spike_times: Filtered array of spike times.
+            - filtered_spike_clusters: Filtered array of spike cluster IDs.
+            - filtered_group_labels: Filtered array of group labels.
+    """
+    # Initialize an empty mask
+    mask = np.zeros_like(spike_clusters, dtype=bool)
+
+    # Apply label filtering
+    if labels_to_include:
+        mask |= filter_by_labels(spike_clusters, group_labels_array, labels_to_include)
+
+    # Apply channel filtering
+    if channels_to_include:
+        mask |= filter_by_channels(spike_clusters, channels_to_include)
+
+    # Apply the mask to filter data
+    filtered_spike_times = spike_times[mask]
+    filtered_spike_clusters = spike_clusters[mask]
+    filtered_group_labels = group_labels_array[spike_clusters[mask]]
+
+    return filtered_spike_times, filtered_spike_clusters, filtered_group_labels
+
+
+def construct_dataframe(
+    spike_times: np.ndarray, spike_clusters: np.ndarray, group_labels: np.ndarray
+) -> pd.DataFrame:
+    """
+    Constructs a DataFrame from spike times, spike clusters, and group labels.
+
+    Parameters:
+        spike_times (np.ndarray): Array of spike times.
+        spike_clusters (np.ndarray): Array of spike cluster IDs.
+        group_labels (np.ndarray): Array of group labels.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing spike times, spike clusters, and group labels.
+    """
+    return pd.DataFrame(
+        {
+            "spike_times": spike_times,
+            "spike_clusters": spike_clusters,
+            "group": group_labels,
+        }
+    )
+
+
+def create_export_dir(folder_path: str, analysis_folder_name: str) -> str:
+    """
+    Creates a directory for exporting analysis results.
+
+    Combines the provided folder path with a subdirectory name (analysis folder name),
+    creates the directory if it does not already exist, and returns the full path.
+
+    Parameters:
+        folder_path (str): The path to the base folder where the analysis directory should be created.
+        analysis_folder_name (str): The name of the subdirectory for storing exported analysis files.
+
+    Returns:
+        str: The full path to the created export directory.
+    """
+    export_dir = os.path.join(folder_path, analysis_folder_name)
+    os.makedirs(export_dir, exist_ok=True)
+    return export_dir
+
+
+def export_spike_times(data_export: dict[int, np.ndarray], export_dir: str) -> None:
+    """
+    Exports spike times for each cluster to CSV and text files.
+
+    Saves spike times for all clusters to a single CSV file and individual text files,
+    organized within a subdirectory for easy access.
+
+    Parameters:
+        data_export (dict[int, np.ndarray]): A dictionary where keys are cluster IDs and
+                                             values are arrays of spike times (in milliseconds).
+        export_dir (str): The directory where the CSV and text files will be saved.
+
+    Returns:
+        None: This function saves files directly to the specified directory.
+    """
+    # Create and export CSV
+    max_length = max(len(arr) for arr in data_export.values())
+    df_spikes = pd.DataFrame(
+        {
+            f"Cluster_{cid}": np.pad(
+                arr, (0, max_length - len(arr)), mode="constant", constant_values=np.nan
+            )
+            for cid, arr in data_export.items()
+        }
+    )
+    csv_path = os.path.join(export_dir, "spike_times_by_cluster_time_ms.csv")
+    df_spikes.to_csv(csv_path, index=False)
+    print(f"Spike times exported to {csv_path}")
+
+    # Create and export text files
+    txt_export_dir = os.path.join(export_dir, "txt_files_for_clampfit_import")
+    os.makedirs(txt_export_dir, exist_ok=True)
+    for cid, arr in data_export.items():
+        out_file = os.path.join(
+            txt_export_dir, f"spike_times_Cluster_{cid}_time_ms.txt"
+        )
+        np.savetxt(out_file, arr, fmt="%.4f")
+    print(f"Text files saved to {txt_export_dir}")
+
+
+def export_data(
+    data_export: dict[int, np.ndarray],
+    baseline_fr_dict: dict[int, float | None],
+    folder_path: str,
+    bin_size: float,
+    max_time: float,
+    drug_time: float | None,
+) -> str:
+    """
+    Orchestrates the export of analyzed spike data, firing rates, and interactive plots.
+
+    This function creates an export directory, saves spike times as CSV and text files,
+    calculates raw and delta firing rates, saves them to an Excel file, and generates
+    interactive HTML plots for firing rates.
+
+    Parameters:
+        data_export (dict[int, np.ndarray]): A dictionary where keys are cluster IDs and
+                                             values are arrays of spike times (in milliseconds).
+        baseline_fr_dict (dict[int, float | None]): A dictionary mapping cluster IDs to their
+                                                    baseline firing rates. None if unavailable.
+        folder_path (str): The base folder path where the export directory will be created.
+        bin_size (float): The size of time bins (in seconds) for calculating firing rates.
+        max_time (float): The maximum time (in seconds) for spike time analysis.
+        drug_time (float | None): The time (in seconds) when the drug was applied, if any.
+
+    Returns:
+        str: The path to the export directory where all files were saved.
+    """
+    # Create export directory
+    analysis_folder_name = f"{os.path.basename(folder_path)}_analysed"
+    export_dir = create_export_dir(folder_path, analysis_folder_name)
+
+    # Filter out clusters with zero spikes
+    data_export = {cid: arr for cid, arr in data_export.items() if len(arr) > 0}
+    if not data_export:
+        print("No spikes to export. Exiting.")
+        return export_dir
+
+    # Export spike times
+    export_spike_times(data_export, export_dir)
+
+    # Calculate firing rates
+    raw_data, delta_data = calculate_firing_rate(
+        data_export, bin_size, max_time, baseline_fr_dict
+    )
+
+    df_raw, df_delta = create_firing_rate_dataframes(raw_data, delta_data)
+    # Export firing rates to Excel
+    xlsx_path = os.path.join(export_dir, "firing_rates_by_cluster.xlsx")
+    with ExcelWriter(xlsx_path) as writer:
+        df_raw.to_excel(writer, sheet_name="Firing_Rates_Raw", index=False)
+        if df_delta is not None and len(df_delta.columns) > 1:
+            df_delta.to_excel(writer, sheet_name="Delta_from_Baseline", index=False)
+    print(f"Firing rates (raw/delta) exported to {xlsx_path}")
+
+    # Export firing rate plots
+    images_dir = os.path.join(export_dir, "firing_rate_images")
+    os.makedirs(images_dir, exist_ok=True)
+    export_firing_rate_html(df_raw, images_dir, bin_size, drug_time)
+    print(f"Interactive firing rate plots exported to {images_dir}")
+
+    return export_dir
+
+
+def export_firing_rate_html(
+    firing_rate_df: pd.DataFrame,
+    images_export_dir: str,
+    bin_size: float,
+    drug_time: float | None,
+) -> None:
+    """
+    Creates and exports interactive HTML plots for firing rates of each cluster.
+
+    Generates bar plots for the firing rates of each cluster, based on the provided DataFrame.
+    The plots include a time axis, firing rate values, and an optional drug application marker.
+    Each plot is saved as an interactive HTML file in the specified export directory.
+
+    Parameters:
+        firing_rate_df (pd.DataFrame): A DataFrame containing firing rate data.
+                                       The first column should be 'Time Intervals (s)' with time bins,
+                                       and subsequent columns should represent firing rates for clusters.
+        images_export_dir (str): The directory where HTML plots will be saved.
+        bin_size (float): The size of time bins (in seconds), included in plot titles and file names.
+        drug_time (float | None): The time (in seconds) of drug application, marked on the plots if provided.
+
+    Returns:
+        None: Saves HTML plots directly to the specified directory.
+    """
+    bin_times = firing_rate_df["Time Intervals (s)"]
+
+    for channel in firing_rate_df.columns[1:]:
+        fig = go.Figure()
+
+        # Add bar trace for firing rates
+        fig.add_trace(
+            go.Bar(
+                x=bin_times,
+                y=firing_rate_df[channel],
+                name=f"Cluster {channel}",
+                marker_color="black",
+            )
+        )
+
+        # Add drug application marker if specified
         if drug_time is not None:
-            relative_spikes_ms = (filtered_spikes - drug_time) * 1000
-            relative_spikes_ms = relative_spikes_ms[relative_spikes_ms >= 0]
-            final_count = len(relative_spikes_ms)
-        else:
-            relative_spikes_ms = filtered_spikes * 1000
-            final_count = len(relative_spikes_ms)
+            max_y = max(firing_rate_df[channel]) * 1.1
+            fig.add_shape(
+                type="line",
+                x0=drug_time,
+                y0=0,
+                x1=drug_time,
+                y1=max_y,
+                line={"color": "red", "width": 2, "dash": "dash"},
+            )
+            fig.add_annotation(
+                x=drug_time,
+                y=max_y,
+                text="Drug Application",
+                showarrow=True,
+                arrowhead=2,
+                ax=0,
+                ay=-20,
+            )
 
-        data_export[channel] = relative_spikes_ms
-        print(f"Channel {channel}: Total spikes = {len(spikes)}, In time range = {
-              len(filtered_spikes)}, Exported = {final_count}")
+        # Customize layout
+        fig.update_layout(
+            title=(
+                f"Firing Rate Histogram for Cluster {channel} "
+                f"(Bin Size: {bin_size}s)"
+            ),
+            xaxis_title="Time (s)",
+            yaxis_title="Firing Rate (Hz)",
+            plot_bgcolor="white",
+            bargap=0,
+            xaxis={"showline": True, "linecolor": "black", "showgrid": False},
+            yaxis={
+                "showline": True,
+                "linecolor": "black",
+                "showgrid": False,
+                "ticks": "outside",
+            },
+        )
 
-    return data_export
+        # Save HTML file
+        html_path = os.path.join(
+            images_export_dir,
+            f"Firing_Rate_Cluster_{
+                channel}_BinSize_{bin_size}s.html",
+        )
+        fig.write_html(html_path)
+
+    print(
+        f"Interactive firing rate HTMLs for clusters saved to {
+          images_export_dir}"
+    )
 
 
-def calculate_firing_rate(data_export: dict[int, np.ndarray], bin_size: float, max_time: float) -> pd.DataFrame:
+def extract_data(
+    df: pd.DataFrame,
+    drug_time: float | None,
+    start_time: float,
+    end_time: float,
+    sample_rate: int,
+    baseline_start: float | None = None,
+    baseline_end: float | None = None,
+) -> tuple[dict[int, np.ndarray], dict[int, float | None]]:
     """
-    Calculates firing rates for each cluster using specified bin size.
+    Filters spike times in a DataFrame by specified start/end times and optionally computes a
+    baseline firing rate for each cluster if baseline_start and baseline_end are provided.
 
     Parameters:
-        data_export (dict): Dictionary with channels as keys and spike times in milliseconds as values.
-        bin_size (float): Bin size for firing rate calculation, in seconds.
-        max_time (float): Maximum time for binning, in seconds.
+        df (pd.DataFrame): DataFrame of spikes, each row has spike_times, spike_clusters, etc.
+        drug_time (float | None): Time of drug application (seconds), or None if not applicable.
+        start_time (float): Start time for analysis (seconds).
+        end_time (float): End time for analysis (seconds).
+        sample_rate (int): Sampling rate in Hz.
+        baseline_start (float | None): Start time of the baseline window (seconds), or None if no baseline.
+        baseline_end (float | None): End time of the baseline window (seconds), or None if no baseline.
 
     Returns:
-        pd.DataFrame: DataFrame with bin times and firing rates for each channel.
+        tuple:
+          - dict[int, np.ndarray]: Dictionary keyed by cluster ID with filtered/shifted spike times (ms).
+          - dict[int, float | None]: Dictionary keyed by cluster ID with baseline firing rate (spikes/s)
+            if computed, or None if no baseline.
+    """
+    cluster_ids = df["spike_clusters"].unique()
+    data_export = {}
+    baseline_fr_dict = {}
+
+    for cluster_id in cluster_ids:
+        # Process each cluster
+        relative_spikes_ms, baseline_fr = process_cluster_data(
+            df,
+            cluster_id,
+            sample_rate,
+            start_time,
+            end_time,
+            drug_time,
+            baseline_start,
+            baseline_end,
+        )
+        data_export[cluster_id] = relative_spikes_ms
+        baseline_fr_dict[cluster_id] = baseline_fr
+
+    return data_export, baseline_fr_dict
+
+
+def process_cluster_data(
+    df: pd.DataFrame,
+    cluster_id: int,
+    sample_rate: int,
+    start_time: float,
+    end_time: float,
+    drug_time: float | None,
+    baseline_start: float | None,
+    baseline_end: float | None,
+) -> tuple[np.ndarray, float | None]:
+    """
+    Processes spike data for a single cluster, including filtering and baseline computation.
+
+    Parameters:
+        df (pd.DataFrame): DataFrame containing spike times and cluster IDs.
+        cluster_id (int): The cluster ID to process.
+        sample_rate (int): Sampling rate in Hz.
+        start_time (float): Start time for analysis (seconds).
+        end_time (float): End time for analysis (seconds).
+        drug_time (float | None): Time of drug application (seconds), or None if not applicable.
+        baseline_start (float | None): Start time of the baseline window (seconds), or None if no baseline.
+        baseline_end (float | None): End time of the baseline window (seconds), or None if no baseline.
+
+    Returns:
+        tuple:
+            - np.ndarray: Filtered and shifted spike times (ms).
+            - float | None: Baseline firing rate (spikes/s), or None if not computed.
+    """
+    cluster_df = df.loc[df["spike_clusters"] == cluster_id]
+    spikes_in_seconds = cluster_df["spike_times"].values / sample_rate
+
+    # Compute baseline firing rate if applicable
+    baseline_fr = None
+    if baseline_start is not None and baseline_end is not None:
+        baseline_fr = compute_baseline_firing_rate(
+            spikes_in_seconds, baseline_start, baseline_end
+        )
+
+    # Filter spikes for the analysis window and shift relative to drug time
+    filtered_spikes = spikes_in_seconds[
+        (spikes_in_seconds >= start_time) & (spikes_in_seconds <= end_time)
+    ]
+    relative_spikes_ms = shift_spike_times(filtered_spikes, drug_time)
+
+    return relative_spikes_ms, baseline_fr
+
+
+def compute_baseline_firing_rate(
+    spikes: np.ndarray, baseline_start: float, baseline_end: float
+) -> float:
+    """
+    Computes the baseline firing rate for a cluster.
+
+    Parameters:
+        spikes (np.ndarray): Array of spike times in seconds.
+        baseline_start (float): Start time of the baseline window (seconds).
+        baseline_end (float): End time of the baseline window (seconds).
+
+    Returns:
+        float: Baseline firing rate (spikes/s).
+    """
+    baseline_spikes = spikes[(spikes >= baseline_start) & (spikes <= baseline_end)]
+    baseline_duration = baseline_end - baseline_start
+    return len(baseline_spikes) / baseline_duration if baseline_duration > 0 else 0.0
+
+
+def shift_spike_times(spikes: np.ndarray, drug_time: float | None) -> np.ndarray:
+    """
+    Shifts spike times relative to the drug application time.
+
+    Parameters:
+        spikes (np.ndarray): Array of spike times in seconds.
+        drug_time (float | None): Time of drug application in seconds, or None if not applicable.
+
+    Returns:
+        np.ndarray: Shifted spike times in milliseconds.
+    """
+    if drug_time is not None:
+        spikes = spikes - drug_time
+    return spikes[spikes >= 0] * 1000  # Convert to milliseconds
+
+
+def calculate_firing_rate(
+    data_export: dict[int, np.ndarray],
+    bin_size: float,
+    max_time: float,
+    baseline_fr_dict: dict[int, float | None] | None = None,
+) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray] | None]:
+    """
+    Calculates raw and delta firing rates for each cluster using the specified bin size.
+
+    Parameters:
+        data_export (dict[int, np.ndarray]): Dictionary where keys are cluster IDs and
+                                             values are arrays of spike times in milliseconds.
+        bin_size (float): Bin size for firing rate calculation (in seconds).
+        max_time (float): Maximum time for the analysis window (in seconds).
+        baseline_fr_dict (dict[int, float | None] | None, optional): Dictionary mapping cluster IDs
+                                                                     to baseline firing rates (spikes/s).
+
+    Returns:
+        tuple:
+            - dict[str, np.ndarray]: Raw firing rates dictionary, including bin times and cluster rates.
+            - dict[str, np.ndarray] | None: Delta firing rates dictionary, or None if no baseline provided.
     """
     bins = np.arange(0, max_time + bin_size, bin_size)
     if bins[-1] > max_time:
-        bins = bins[:-1]  # Adjust to remove incomplete bin
+        bins = bins[:-1]
 
-    bin_times = bins[:-1]
-    firing_rates = {'Bin_Time_s': bin_times}
+    raw_data = {"Time Intervals (s)": bins[:-1]}
+    delta_data = {} if baseline_fr_dict else None
 
     for channel, spikes in data_export.items():
-        spikes_in_seconds = spikes / 1000
-        counts, _ = np.histogram(spikes_in_seconds, bins=bins)
-        firing_rate = counts / bin_size
-        firing_rates[channel] = firing_rate
+        # Convert spike times from ms to seconds
+        spike_times_sec = spikes / 1000.0
 
-    return pd.DataFrame(firing_rates)
+        # Calculate raw firing rates
+        counts, _ = np.histogram(spike_times_sec, bins=bins)
+        raw_data[f"Cluster_{channel}"] = counts / bin_size
+
+        # Calculate delta firing rates if baseline is provided
+        if delta_data is not None:  # Ensure delta_data is a dictionary
+            baseline_fr = baseline_fr_dict.get(channel)
+            if baseline_fr is not None:
+                delta_data[f"Cluster_{channel}"] = (
+                    raw_data[f"Cluster_{channel}"] - baseline_fr
+                )
+
+    return raw_data, delta_data
 
 
-def calculate_isi_histogram(data_export: dict[int, np.ndarray], time_bin: float = 0.01, max_isi_time: float = 0.75) -> pd.DataFrame:
+def create_firing_rate_dataframes(
+    raw_data: dict[str, np.ndarray], delta_data: dict[str, np.ndarray] | None
+) -> tuple[pd.DataFrame, pd.DataFrame | None]:
+    """
+    Converts raw and delta firing rate dictionaries into sorted DataFrames.
+
+    Parameters:
+        raw_data (dict[str, np.ndarray]): Raw firing rates dictionary, including bin times and cluster rates.
+        delta_data (dict[str, np.ndarray] | None): Delta firing rates dictionary, or None.
+
+    Returns:
+        tuple:
+            - pd.DataFrame: Sorted DataFrame of raw firing rates.
+            - pd.DataFrame | None: Sorted DataFrame of delta firing rates, or None.
+    """
+    # Sort cluster columns numerically based on raw_data
+    sorted_cluster_columns = sorted(
+        [col for col in raw_data.keys() if col.startswith("Cluster_")],
+        key=lambda x: int(x.split("_")[1]),
+    )
+    sorted_columns = ["Time Intervals (s)"] + sorted_cluster_columns
+
+    # Create raw DataFrame
+    raw_df = pd.DataFrame(raw_data)[sorted_columns]
+
+    # Create delta DataFrame only with matching columns
+    delta_df = None
+    if delta_data:
+        delta_sorted_columns = ["Time Intervals (s)"] + [
+            col for col in sorted_cluster_columns if col in delta_data
+        ]
+        delta_df = pd.DataFrame(delta_data)[delta_sorted_columns]
+
+    return raw_df, delta_df
+
+
+def calculate_isi_histogram(
+    data_export: dict[int, np.ndarray],
+    time_bin: float = 0.01,
+    max_isi_time: float = 0.75,
+) -> pd.DataFrame:
     """
     Calculates interspike interval (ISI) histograms for each channel.
 
     Parameters:
-        data_export (dict): Dictionary with channels as keys and spike times in milliseconds as values.
-        time_bin (float): Bin width for the ISI histogram, in seconds.
-        max_isi_time (float): Maximum ISI time to consider for histogram, in seconds.
+        data_export (dict[int, np.ndarray]): Dictionary where keys are channel IDs and
+                                             values are arrays of spike times (in milliseconds).
+        time_bin (float, optional): Bin width for the ISI histogram (in seconds). Default is 0.01s.
+        max_isi_time (float, optional): Maximum ISI (in seconds) to include in the histogram. Default is 0.75s.
 
     Returns:
-        pd.DataFrame: DataFrame with bin start times as the first column and ISI counts for each channel.
+        pd.DataFrame: A DataFrame containing:
+            - 'Bin_Starts': The left edges of each ISI bin (from 0 to max_isi_time).
+            - One column per channel: Counts of ISIs falling into each bin.
     """
     n_bins = int(max_isi_time / time_bin)
     bin_edges = np.arange(0, (n_bins + 1) * time_bin, time_bin)
     isi_data = {"Bin_Starts": bin_edges[:-1]}
 
     for channel, spikes in data_export.items():
-        spikes_in_seconds = spikes / 1000  # Convert ms to seconds
-        isis = np.diff(spikes_in_seconds)  # Calculate ISI
+        # Convert ms -> s, then compute interspike intervals
+        spikes_in_seconds = spikes / 1000.0
+        isis = np.diff(spikes_in_seconds)
         isi_histogram, _ = np.histogram(isis, bins=bin_edges)
         isi_data[channel] = isi_histogram
 
     return pd.DataFrame(isi_data)
 
 
-def calculate_hazard_function(isi_df: pd.DataFrame, early_time: float = 0.07, late_time_start: float = 0.41, late_time_end: float = 0.5) -> tuple[pd.DataFrame, pd.DataFrame]:
+def export_hazard_excel(
+    export_dir: str,
+    hazard_df: pd.DataFrame,
+    hazard_summary_df: pd.DataFrame,
+    isi_df: pd.DataFrame,
+) -> None:
+    """
+    Exports hazard and ISI analysis data to an Excel file with multiple sheets.
+
+    The exported Excel file contains:
+        - "ISI_Histogram": Interspike interval histogram data.
+        - "Hazard_Function": Hazard function values over time bins for each channel.
+        - "Hazard_Summary": Summary metrics of the hazard function 
+            (e.g., peak early hazard, mean late, ratio).
+
+    Parameters:
+        export_dir (str): Directory where the Excel file will be saved.
+        hazard_df (pd.DataFrame): DataFrame containing hazard function values for each channel.
+        hazard_summary_df (pd.DataFrame): DataFrame with summary metrics of the hazard function.
+        isi_df (pd.DataFrame): DataFrame containing ISI histograms.
+
+    Returns:
+        None: The function writes the Excel file to `export_dir` and prints a confirmation message.
+    """
+    excel_path = os.path.join(export_dir, "isi_and_hazard_analysis.xlsx")
+
+    with ExcelWriter(excel_path, engine="xlsxwriter") as writer:
+        isi_df.to_excel(writer, sheet_name="ISI_Histogram", index=False)
+        hazard_df.to_excel(writer, sheet_name="Hazard_Function", index=False)
+        hazard_summary_df.to_excel(writer, sheet_name="Hazard_Summary", index=False)
+
+    print(f"ISI and hazard data exported to {excel_path}")
+
+
+def calculate_hazard_function(
+    isi_df: pd.DataFrame,
+    early_time: float = 0.07,
+    late_time_start: float = 0.41,
+    late_time_end: float = 0.5,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Calculates hazard function values for each channel and key hazard metrics.
 
     Parameters:
-        isi_df (pd.DataFrame): ISI histogram counts with bin start times as the first column.
-        early_time (float): Threshold for early hazard calculation (default 0.07 s).
-        late_time_start (float): Start of late interval (default 0.41 s).
-        late_time_end (float): End of late interval (default 0.5 s).
+        isi_df (pd.DataFrame): DataFrame containing ISI histogram data. Should have:
+            - 'Bin_Starts': Left edges of ISI bins.
+            - One column per channel with ISI histogram counts.
+        early_time (float): Upper threshold (in seconds) for the "early" hazard region.
+        late_time_start (float): Start of the "late" hazard region (in seconds).
+        late_time_end (float): End of the "late" hazard region (in seconds).
 
     Returns:
-        pd.DataFrame: Hazard function values for each channel.
-        pd.DataFrame: Key hazard metrics (peak early hazard, mean late hazard, hazard ratio) for each channel.
+        tuple:
+            - pd.DataFrame: Hazard function values with 'Bin_Starts' and one column per channel.
+            - pd.DataFrame: Hazard summary metrics for each channel, including:
+                - 'Cluster': Channel name.
+                - 'Peak Early Hazard': Maximum hazard value in the early region.
+                - 'Mean Late Hazard': Average hazard value in the late region.
+                - 'Hazard Ratio': Ratio of peak early hazard to mean late hazard.
     """
-    bin_starts = isi_df['Bin_Starts']
-    hazard_data = {'Bin_Starts': bin_starts}
-    hazard_summary_data = {'Cluster': [], 'Peak Early Hazard': [
-    ], 'Mean Late Hazard': [], 'Hazard Ratio': []}
+    bin_starts = isi_df["Bin_Starts"].values
 
-    for channel in isi_df.columns[1:]:
-        isi_counts = isi_df[channel]
-        total_spikes = np.sum(isi_counts)
+    # Compute hazard values for all channels
+    hazard_df = compute_hazard_values(isi_df, bin_starts)
 
-        hazard_values = [
-            isi_counts[i] / (total_spikes -
-                             np.cumsum(isi_counts)[i] + isi_counts[i])
-            if np.cumsum(isi_counts)[i] < total_spikes else 0
-            for i in range(len(bin_starts))
-        ]
-        hazard_data[channel] = hazard_values
-
-        peak_early_hazard = max(hazard_values[i] for i in range(
-            len(bin_starts)) if bin_starts[i] <= early_time)
-        mean_late_hazard = np.mean([hazard_values[i] for i in range(len(bin_starts))
-                                    if late_time_start <= bin_starts[i] <= late_time_end])
-        hazard_ratio = peak_early_hazard / \
-            mean_late_hazard if mean_late_hazard != 0 else np.nan
-
-        hazard_summary_data['Cluster'].append(channel)
-        hazard_summary_data['Peak Early Hazard'].append(peak_early_hazard)
-        hazard_summary_data['Mean Late Hazard'].append(mean_late_hazard)
-        hazard_summary_data['Hazard Ratio'].append(hazard_ratio)
-
-    hazard_df = pd.DataFrame(hazard_data)
-    hazard_summary_df = pd.DataFrame(hazard_summary_data)
+    # Compute summary metrics
+    hazard_summary_df = compute_hazard_summary(
+        hazard_df, bin_starts, early_time, late_time_start, late_time_end
+    )
 
     return hazard_df, hazard_summary_df
 
 
-def export_firing_rate_html(firing_rate_df: pd.DataFrame, images_export_dir: str, bin_size: float, drug_time: float | None) -> None:
-    """
-    Creates and exports interactive HTML plots for each cluster's firing rate with bin size in title and file name.
+def compute_hazard_values(isi_df: pd.DataFrame, bin_starts: np.ndarray) -> pd.DataFrame:
+    """Compute hazard values for each channel."""
+    hazard_data = {"Bin_Starts": bin_starts}
 
-    Parameters:
-        firing_rate_df (pd.DataFrame): DataFrame containing bin times and firing rates for each channel.
-        images_export_dir (str): Directory to save the HTML files.
-        bin_size (float): Bin size for firing rate in seconds.
-        drug_time (float or None): Time of drug application in seconds, if applicable.
-    """
-    bin_times = firing_rate_df['Bin_Time_s']
-    for channel in firing_rate_df.columns[1:]:
-        fig = go.Figure()
-        fig.add_trace(go.Bar(
-            x=bin_times,
-            y=firing_rate_df[channel],
-            name=f"Cluster {channel}",
-            marker_color='black'
-        ))
+    for channel in isi_df.columns[1:]:
+        isi_counts = isi_df[channel].values
+        total_spikes = np.sum(isi_counts)
 
-        if drug_time is not None:
-            fig.add_shape(
-                type="line",
-                x0=drug_time,
-                y0=0,
-                x1=drug_time,
-                y1=max(firing_rate_df[channel]) * 1.1,
-                line=dict(color="red", width=2, dash="dash")
-            )
-            fig.add_annotation(
-                x=drug_time,
-                y=max(firing_rate_df[channel]) * 1.1,
-                text="Drug Application",
-                showarrow=True,
-                arrowhead=2,
-                ax=0,
-                ay=-20
-            )
+        # Compute hazard values
+        cumsum_isi = np.cumsum(isi_counts)
+        hazard_values = np.divide(
+            isi_counts,
+            np.maximum(total_spikes - cumsum_isi + isi_counts, 1),
+            where=(cumsum_isi < total_spikes),
+            out=np.zeros_like(isi_counts, dtype=float),
+        )
+        hazard_data[channel] = hazard_values
 
-        fig.update_layout(
-            title=f"Firing Rate Histogram for Cluster {
-                channel} (Bin Size: {bin_size}s)",
-            xaxis_title="Time (s)",
-            yaxis_title="Firing Rate (Hz)",
-            plot_bgcolor='white',
-            bargap=0,
-            xaxis=dict(showline=True, linecolor='black', showgrid=False),
-            yaxis=dict(showline=True, linecolor='black',
-                       showgrid=False, ticks='outside')
+    return pd.DataFrame(hazard_data)
+
+
+def compute_hazard_summary(
+    hazard_df: pd.DataFrame,
+    bin_starts: np.ndarray,
+    early_time: float,
+    late_time_start: float,
+    late_time_end: float,
+) -> pd.DataFrame:
+    """Compute hazard summary metrics for each channel."""
+    summary_data = []
+
+    for channel in hazard_df.columns[1:]:
+        hazard_values = hazard_df[channel].values
+
+        # Early hazard metrics
+        early_mask = bin_starts <= early_time
+        peak_early_hazard = hazard_values[early_mask].max() if early_mask.any() else 0
+
+        # Late hazard metrics
+        late_mask = (bin_starts >= late_time_start) & (bin_starts <= late_time_end)
+        mean_late_hazard = hazard_values[late_mask].mean() if late_mask.any() else 0
+
+        # Hazard ratio
+        hazard_ratio = (
+            peak_early_hazard / mean_late_hazard if mean_late_hazard > 0 else np.nan
         )
 
-        html_path = os.path.join(images_export_dir, f"Firing_Rate_Cluster_{
-                                 channel}_BinSize_{bin_size}s.html")
-        fig.write_html(html_path)
-    print(f"Interactive firing rate HTMLs for Channels saved to {html_path}")
+        # Append summary data
+        summary_data.append(
+            {
+                "Cluster": channel,
+                "Peak Early Hazard": peak_early_hazard,
+                "Mean Late Hazard": mean_late_hazard,
+                "Hazard Ratio": hazard_ratio,
+            }
+        )
+
+    return pd.DataFrame(summary_data)
 
 
-def export_data(data_export: dict[int, np.ndarray], folder_path: str, bin_size: float, max_time: float, drug_time: float | None) -> str:
+def get_user_input(
+    file_paths: dict[str, str]
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, list]]:
     """
-    Exports filtered spike times and firing rates to structured CSV files, individual text files for each cluster, 
-    and HTML plots.
+    Handles user input for filtering data based on channels or labels.
+    Loads raw spike data and creates a label lookup array.
 
     Parameters:
-        data_export (dict): Dictionary of spike times per channel.
-        folder_path (str): Base folder path for exporting data.
-        bin_size (float): Bin size for firing rate calculation in seconds.
-        max_time (float): Maximum time for firing rate calculation.
-        drug_time (float or None): Time of drug application in seconds, if applicable.
+        file_paths (dict[str, str]): Paths to required input files.
 
     Returns:
-        str: Directory path where data is exported.
+        tuple: Contains spike times, spike clusters, group labels array, 
+        and user filtering selections.
     """
-    analysis_folder_name = f"{os.path.basename(folder_path)}_analysed"
-    export_dir = os.path.join(folder_path, analysis_folder_name)
-    os.makedirs(export_dir, exist_ok=True)
+    spike_times_path = file_paths["spike_times.npy"]
+    spike_clusters_path = file_paths["spike_clusters.npy"]
+    group_labels_path = file_paths["cluster_group.tsv"]
 
-    # Filter out channels with no spikes
-    data_export = {channel: times for channel,
-                   times in data_export.items() if len(times) > 0}
+    # Prompt user for channels/labels to include
+    channels_to_include, labels_to_include = channels_or_labels_to_export()
 
-    if data_export:
-        # Create overall CSV with padded spike times for all clusters
-        max_length = max(len(times) for times in data_export.values())
-        export_df = pd.DataFrame({
-            channel: np.pad(times, (0, max_length - len(times)),
-                            'constant', constant_values=np.nan)
-            for channel, times in data_export.items()
-        })
-        export_df.to_csv(os.path.join(
-            export_dir, "spike_times_by_cluster_time_ms.csv"), index=False)
-        print(f"Spike times exported to {export_dir}")
+    # Load raw spike data
+    spike_times, spike_clusters = load_spike_data(spike_times_path, spike_clusters_path)
+    group_labels_array = create_label_lookup(group_labels_path)
 
-        # Create folder for individual text files
-        txt_export_dir = os.path.join(
-            export_dir, 'txt_files_for_clampfit_import')
-        os.makedirs(txt_export_dir, exist_ok=True)
-
-        # Export each cluster's spike times as a separate text file
-        for channel, times in data_export.items():
-            txt_file_path = os.path.join(
-                txt_export_dir, f"spike_times_cluster_{channel}_time_ms.txt")
-            np.savetxt(txt_file_path, times, fmt='%0.4f')
-        print(f"Individual text files for each cluster saved to {
-              txt_export_dir}")
-
-        # Export firing rate data
-        firing_rate_df = calculate_firing_rate(data_export, bin_size, max_time)
-        firing_rate_df.to_csv(os.path.join(
-            export_dir, "firing_rates_by_cluster.csv"), index=False)
-        print(f"Firing rates exported to {export_dir}")
-
-        # Generate and export interactive HTML plots
-        images_export_dir = os.path.join(export_dir, 'firing_rate_images')
-        os.makedirs(images_export_dir, exist_ok=True)
-        export_firing_rate_html(
-            firing_rate_df, images_export_dir, bin_size, drug_time)
-
-    return export_dir
+    return (
+        spike_times,
+        spike_clusters,
+        group_labels_array,
+        {
+            "channels_to_include": channels_to_include,
+            "labels_to_include": labels_to_include,
+        },
+    )
 
 
-def export_hazard_excel(folder_path: str, export_dir: str, hazard_df: pd.DataFrame, hazard_summary_df: pd.DataFrame, isi_df: pd.DataFrame) -> None:
+def process_filtered_data(
+    spike_times: np.ndarray,
+    spike_clusters: np.ndarray,
+    group_labels_array: np.ndarray,
+    user_filters: dict[str, list],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
     """
-    Exports hazard function data, summary metrics, and ISI data to a single Excel file.
+    Filters data based on user selections and computes the maximum recording time.
 
     Parameters:
-        folder_path (str): Path where the Excel file will be saved.
-        export_dir (str): Directory for exporting the Excel file.
-        hazard_df (pd.DataFrame): Hazard function values for each cluster.
-        hazard_summary_df (pd.DataFrame): Summary metrics for each cluster.
-        isi_df (pd.DataFrame): Raw ISI histogram data for each cluster.
-    """
-    excel_path = os.path.join(export_dir, "ISI_Hazard_Analysis.xlsx")
-    with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
-        hazard_summary_df.to_excel(
-            writer, sheet_name='Summary Data', index=False)
-        hazard_df.to_excel(writer, sheet_name='Hazard Function', index=False)
-        isi_df.to_excel(writer, sheet_name='ISI Data', index=False)
+        spike_times (np.ndarray): Raw spike times.
+        spike_clusters (np.ndarray): Raw spike cluster IDs.
+        group_labels_array (np.ndarray): Group label mappings.
+        user_filters (dict): User-selected filters for channels and labels.
 
-    print("ISI and Hazard data exported to Excel file:", excel_path)
+    Returns:
+        tuple: Filtered spike times, spike clusters, group labels, and maximum time.
+    """
+    filtered_spike_times, filtered_spike_clusters, filtered_labels = filter_data(
+        spike_times,
+        spike_clusters,
+        group_labels_array,
+        labels_to_include=user_filters["labels_to_include"],
+        channels_to_include=user_filters["channels_to_include"],
+    )
+
+    max_time = (
+        np.max(filtered_spike_times) / 30000 if len(filtered_spike_times) > 0 else 0
+    )
+    print(f"Recording length: {max_time:.2f}s")
+
+    return filtered_spike_times, filtered_spike_clusters, filtered_labels, max_time
+
+
+def prepare_filtered_data(file_paths: dict) -> tuple[pd.DataFrame, float]:
+    """
+    Loads spike data, applies user-specified filters, and prepares the recording DataFrame.
+
+    Parameters:
+        file_paths (dict): Dictionary containing paths to required files 
+        (e.g., spike times, clusters).
+
+    Returns:
+        tuple:
+            - pd.DataFrame: Filtered spike data containing spike times, clusters, and labels.
+            - float: Maximum recording time in seconds.
+    """
+    spike_times, spike_clusters, group_labels_array, user_filters = get_user_input(
+        file_paths
+    )
+    filtered_spike_times, filtered_spike_clusters, filtered_labels, max_time = (
+        process_filtered_data(
+            spike_times, spike_clusters, group_labels_array, user_filters
+        )
+    )
+    recording_dataframe = construct_dataframe(
+        filtered_spike_times, filtered_spike_clusters, filtered_labels
+    )
+    return recording_dataframe, max_time
+
+
+def get_user_parameters(
+    max_time: float,
+) -> tuple[float | None, float, float, float, float | None, float | None]:
+    """
+    Collects user-defined parameters for data analysis, including drug application time,
+    start and end times, bin size, and baseline period.
+
+    Parameters:
+        max_time (float): Maximum recording time in seconds.
+
+    Returns:
+        tuple:
+            - float | None: Drug application time in seconds, or None if not specified.
+            - float: Start time for analysis in seconds.
+            - float: End time for analysis in seconds.
+            - float: Bin size for firing rate calculation in seconds.
+            - float | None: Start time of the baseline period, or None if not specified.
+            - float | None: End time of the baseline period, or None if not specified.
+    """
+    drug_time = drug_application_time()
+    start_time, end_time = start_and_end_time(max_time)
+    bin_size = float(
+        input(
+            "Enter the bin size for firing rate calculation (s), or press Enter for 1s: "
+        )
+        or 1.0
+    )
+    baseline_start, baseline_end = prompt_for_baseline(max_time)
+    print(
+        f"Analyzing data from {start_time}s to {
+          end_time}s with bin size {bin_size}s"
+    )
+    if drug_time:
+        print(f"Drug application time: {drug_time:.2f}s")
+    return drug_time, start_time, end_time, bin_size, baseline_start, baseline_end
 
 
 def main():
-    # Choose folder and load files
-    folder_path = file_chooser()
-    if not folder_path:
-        return
+    """
+    Orchestrates the complete data processing and analysis pipeline.
 
-    spike_times_path = os.path.join(folder_path, 'spike_times.npy')
-    spike_clusters_path = os.path.join(folder_path, 'spike_clusters.npy')
+    Steps:
+        - Select and validate the folder containing required files.
+        - Load and filter data based on user input.
+        - Collect user-defined parameters for analysis.
+        - Perform data extraction, ISI, and hazard analysis.
+        - Export results to files.
+    """
+    # Choose folder and validate files
+    file_paths = choose_and_validate_folder()
 
-    # Load spike times and determine max_time
-    channels = channels_to_export()
-    selected_spikes, sample_rate = load_selected_channels(
-        spike_times_path, spike_clusters_path, channels)
-    max_time = np.max([np.max(spikes) for spikes in selected_spikes.values() if len(
-        spikes) > 0]) / sample_rate
+    # Load and filter data
+    recording_dataframe, max_time = prepare_filtered_data(file_paths)
 
-    # Get user input for drug application time, start/end time, and bin size
-    drug_time = drug_application_time() or 0
-    start_time, end_time = start_and_end_time(max_time)
-    bin_size = float(input(
-        "Enter the bin size for firing rate calculation (s), or press Enter for 1s: ") or 1.0)
+    # Collect user-defined parameters
+    drug_time, start_time, end_time, bin_size, baseline_start, baseline_end = (
+        get_user_parameters(max_time)
+    )
 
-    # Load and filter data for selected clusters
-    data_export = extract_data(
-        selected_spikes, drug_time, start_time, end_time, sample_rate)
+    # Extract data for analysis
+    raw_fr_dict, baseline_fr_dict = extract_data(
+        df=recording_dataframe,
+        drug_time=drug_time,
+        start_time=start_time,
+        end_time=end_time,
+        sample_rate=30000,
+        baseline_start=baseline_start,
+        baseline_end=baseline_end,
+    )
 
     # Export spike times and firing rates
-    export_dir = export_data(data_export, folder_path,
-                             bin_size, max_time, drug_time)
+    export_dir = export_data(
+        raw_fr_dict,
+        baseline_fr_dict,
+        os.path.dirname(file_paths["spike_times.npy"]),
+        bin_size,
+        max_time,
+        drug_time,
+    )
 
-    # ISI and hazard calculations
-    isi_df = calculate_isi_histogram(data_export)
+    # Perform ISI and hazard analysis
+    isi_df = calculate_isi_histogram(raw_fr_dict)
     hazard_df, hazard_summary_df = calculate_hazard_function(isi_df)
 
-    # Export ISI and hazard data to Excel
-    export_hazard_excel(folder_path, export_dir, hazard_df,
-                        hazard_summary_df, isi_df)
+    # Export hazard and ISI analysis
+    export_hazard_excel(export_dir, hazard_df, hazard_summary_df, isi_df)
 
 
 if __name__ == "__main__":
