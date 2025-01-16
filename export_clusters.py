@@ -29,7 +29,7 @@ def file_chooser() -> str | None:
         print("No folder selected.")
         return None
 
-    print(f'''Selected folder: {folder_path}''')
+    print(f"""Selected folder: {folder_path}""")
     return folder_path
 
 
@@ -57,7 +57,7 @@ def find_specific_files_in_folder(
 def choose_and_validate_folder() -> dict[str, str]:
     """
     Prompts the user to choose a folder and validates the presence of required files.
-    If required files are missing, prompts the user to pick another folder until valid 
+    If required files are missing, prompts the user to pick another folder until valid
     files are found or the user cancels.
 
     Returns:
@@ -71,12 +71,10 @@ def choose_and_validate_folder() -> dict[str, str]:
 
         # Find required files in the selected folder
         file_paths = find_specific_files_in_folder(folder_path, REQUIRED_FILES)
-        missing_files = [
-            file for file in REQUIRED_FILES if file not in file_paths]
+        missing_files = [file for file in REQUIRED_FILES if file not in file_paths]
 
         if missing_files:
-            print(
-                f'''Error: Missing required files: {', '.join(missing_files)}''')
+            print(f"""Error: Missing required files: {', '.join(missing_files)}""")
             print("Please select another folder or cancel to exit.")
         else:
             return file_paths
@@ -130,7 +128,9 @@ def start_and_end_time(max_time: float) -> tuple[float, float]:
     return start_time, end_time
 
 
-def prompt_for_baseline(max_time: float, min_time: float = 0) -> tuple[float, float] | tuple[None, None]:
+def prompt_for_baseline(
+    max_time: float, min_time: float = 0
+) -> tuple[float, float] | tuple[None, None]:
     """
     Asks the user if they want to specify a baseline time range.
     Returns (None, None) if no baseline is specified.
@@ -138,14 +138,17 @@ def prompt_for_baseline(max_time: float, min_time: float = 0) -> tuple[float, fl
 
     The minimum baseline time is adjusted if the start time is greater than 0.
     """
-    if input("Do you want to specify a baseline period? (y/n): ").strip().lower() != "y":
+    if (
+        input("Do you want to specify a baseline period? (y/n): ").strip().lower()
+        != "y"
+    ):
         return None, None
 
     try:
         baseline_start = float(
-            input(f"Enter baseline start time (>= {min_time:.2f}s): "))
-        baseline_end = float(
-            input(f"Enter baseline end time (<= {max_time:.2f}s): "))
+            input(f"Enter baseline start time (>= {min_time:.2f}s): ")
+        )
+        baseline_end = float(input(f"Enter baseline end time (<= {max_time:.2f}s): "))
 
         # Ensure the baseline start time is greater than or equal to min_time
         if baseline_start < min_time:
@@ -235,22 +238,24 @@ def create_label_lookup(group_labels_path: str) -> np.ndarray:
     """
     # Check for the correct group label column
     group_label_column = None
-    
+
     cluster_group = pd.read_csv(group_labels_path, sep="\t")
     max_cluster_id = cluster_group["cluster_id"].max() + 1
     group_labels_array = np.full(max_cluster_id, "unknown", dtype=object)
-    
+
     if "group" in cluster_group.columns:
         group_label_column = "group"
     elif "KSLabel" in cluster_group.columns:
         group_label_column = "KSLabel"
     else:
         raise ValueError(
-            "Neither 'group' nor 'KSLabel' column found in the group labels dataframe.")
+            "Neither 'group' nor 'KSLabel' column found in the group labels dataframe."
+        )
 
     # Assign the values from the appropriate column
-    group_labels_array[cluster_group["cluster_id"]
-                    .values] = cluster_group[group_label_column].values
+    group_labels_array[cluster_group["cluster_id"].values] = cluster_group[
+        group_label_column
+    ].values
 
     return group_labels_array
 
@@ -271,11 +276,10 @@ def filter_by_labels(
     Returns:
         np.ndarray: A boolean mask for the selected labels.
     """
-    valid_cluster_ids = np.where(
-        np.isin(group_labels_array, labels_to_include))[0]
+    valid_cluster_ids = np.where(np.isin(group_labels_array, labels_to_include))[0]
     print(
-        f'''Filtered cluster IDs for labels
-        {labels_to_include}: {valid_cluster_ids}'''
+        f"""Filtered cluster IDs for labels
+        {labels_to_include}: {valid_cluster_ids}"""
     )
     return np.isin(spike_clusters, valid_cluster_ids)
 
@@ -324,8 +328,7 @@ def filter_data(
 
     # Apply label filtering
     if labels_to_include:
-        mask |= filter_by_labels(
-            spike_clusters, group_labels_array, labels_to_include)
+        mask |= filter_by_labels(spike_clusters, group_labels_array, labels_to_include)
 
     # Apply channel filtering
     if channels_to_include:
@@ -455,8 +458,7 @@ def export_data(
     export_dir = create_export_dir(folder_path, analysis_folder_name)
 
     # Filter out clusters with zero spikes
-    data_export = {cid: arr for cid,
-                   arr in data_export.items() if len(arr) > 0}
+    data_export = {cid: arr for cid, arr in data_export.items() if len(arr) > 0}
     if not data_export:
         print("No spikes to export. Exiting.")
         return export_dir
@@ -475,8 +477,7 @@ def export_data(
     with ExcelWriter(xlsx_path) as writer:
         df_raw.to_excel(writer, sheet_name="Firing_Rates_Raw", index=False)
         if df_delta is not None and len(df_delta.columns) > 1:
-            df_delta.to_excel(
-                writer, sheet_name="Delta_from_Baseline", index=False)
+            df_delta.to_excel(writer, sheet_name="Delta_from_Baseline", index=False)
     print(f"Firing rates (raw/delta) exported to {xlsx_path}")
 
     # Export firing rate plots
@@ -570,12 +571,12 @@ def export_firing_rate_html(
         # Save HTML file
         html_path = os.path.join(
             images_export_dir,
-            f'''Firing_Rate_Cluster_{channel}_BinSize_{bin_size}s.html''',
+            f"""Firing_Rate_Cluster_{channel}_BinSize_{bin_size}s.html""",
         )
         fig.write_html(html_path)
 
     print(
-        f'''Interactive firing rate HTMLs for clusters saved to {images_export_dir}'''
+        f"""Interactive firing rate HTMLs for clusters saved to {images_export_dir}"""
     )
 
 
@@ -690,8 +691,7 @@ def compute_baseline_firing_rate(
     Returns:
         float: Baseline firing rate (spikes/s).
     """
-    baseline_spikes = spikes[(spikes >= baseline_start)
-                             & (spikes <= baseline_end)]
+    baseline_spikes = spikes[(spikes >= baseline_start) & (spikes <= baseline_end)]
     baseline_duration = baseline_end - baseline_start
     return len(baseline_spikes) / baseline_duration if baseline_duration > 0 else 0.0
 
@@ -841,7 +841,7 @@ def calculate_isi_histogram(
             - pd.DataFrame | None: If baseline is provided, a DataFrame containing baseline ISI histograms. Otherwise, None.
     """
     baseline_data = {} if baseline_start is not None else None
-    
+
     n_bins = int(max_isi_time / time_bin)
     bin_edges = np.arange(0, (n_bins + 1) * time_bin, time_bin)
     isi_data = {"Bin_Starts": bin_edges[:-1]}
@@ -856,8 +856,8 @@ def calculate_isi_histogram(
         # If baseline is provided, calculate ISI for the baseline period
         if baseline_data is not None:
             baseline_spikes = spikes_in_seconds[
-                (spikes_in_seconds >= baseline_start) & (
-                    spikes_in_seconds <= baseline_end)
+                (spikes_in_seconds >= baseline_start)
+                & (spikes_in_seconds <= baseline_end)
             ]
             baseline_isis = np.diff(baseline_spikes)
             baseline_histogram, _ = np.histogram(baseline_isis, bins=bin_edges)
@@ -865,7 +865,7 @@ def calculate_isi_histogram(
 
     # Formatting the DataFrame
     formatted_columns = {"Bin_Starts": isi_data["Bin_Starts"]}
-    
+
     for key, value in isi_data.items():
         if key != "Bin_Starts":
             formatted_columns[f"Cluster_{key}"] = value
@@ -880,6 +880,7 @@ def calculate_isi_histogram(
         baseline_isi_df = pd.DataFrame(baseline_columns)
 
     return pd.DataFrame(formatted_columns), baseline_isi_df
+
 
 def export_hazard_excel(
     export_dir: str,
@@ -896,7 +897,7 @@ def export_hazard_excel(
     The exported Excel file contains:
         - "ISI_Histogram": Interspike interval histogram data.
         - "Hazard_Function": Hazard function values over time bins for each channel.
-        - "Hazard_Summary": Summary metrics of the hazard function 
+        - "Hazard_Summary": Summary metrics of the hazard function
             (e.g., peak early hazard, mean late, ratio).
 
     Parameters:
@@ -914,19 +915,21 @@ def export_hazard_excel(
     with ExcelWriter(excel_path, engine="xlsxwriter") as writer:
         isi_df.to_excel(writer, sheet_name="ISI_Histogram", index=False)
         hazard_df.to_excel(writer, sheet_name="Hazard_Function", index=False)
-        hazard_summary_df.to_excel(
-            writer, sheet_name="Hazard_Summary", index=False)
+        hazard_summary_df.to_excel(writer, sheet_name="Hazard_Summary", index=False)
 
         # Write baseline data if available
         if baseline_isi_df is not None:
             baseline_isi_df.to_excel(
-                writer, sheet_name="Baseline_ISI_Histogram", index=False)
+                writer, sheet_name="Baseline_ISI_Histogram", index=False
+            )
         if baseline_hazard_df is not None:
             baseline_hazard_df.to_excel(
-                writer, sheet_name="Baseline_Hazard_Function", index=False)
+                writer, sheet_name="Baseline_Hazard_Function", index=False
+            )
         if baseline_hazard_summary_df is not None:
             baseline_hazard_summary_df.to_excel(
-                writer, sheet_name="Baseline_Hazard_Summary", index=False)
+                writer, sheet_name="Baseline_Hazard_Summary", index=False
+            )
 
     print(f"ISI and hazard data exported to {excel_path}")
 
@@ -970,15 +973,24 @@ def calculate_hazard_function(
     if baseline_isi_df is not None:
         baseline_isi_bin_starts = baseline_isi_df["Bin_Starts"].values
         baseline_hazard_df = compute_hazard_values(
-            baseline_isi_df, baseline_isi_bin_starts)
-        baseline_hazard_summary_df = compute_hazard_summary(
-            baseline_hazard_df, baseline_isi_bin_starts, early_time, late_time_start, late_time_end
+            baseline_isi_df, baseline_isi_bin_starts
         )
-        return hazard_df, hazard_summary_df, baseline_hazard_df, baseline_hazard_summary_df
+        baseline_hazard_summary_df = compute_hazard_summary(
+            baseline_hazard_df,
+            baseline_isi_bin_starts,
+            early_time,
+            late_time_start,
+            late_time_end,
+        )
+        return (
+            hazard_df,
+            hazard_summary_df,
+            baseline_hazard_df,
+            baseline_hazard_summary_df,
+        )
 
     # If no baseline ISI data, return None for baseline data
     return hazard_df, hazard_summary_df, None, None
-
 
 
 def compute_hazard_values(isi_df: pd.DataFrame, bin_starts: np.ndarray) -> pd.DataFrame:
@@ -1017,14 +1029,11 @@ def compute_hazard_summary(
 
         # Early hazard metrics
         early_mask = bin_starts <= early_time
-        peak_early_hazard = hazard_values[early_mask].max(
-        ) if early_mask.any() else 0
+        peak_early_hazard = hazard_values[early_mask].max() if early_mask.any() else 0
 
         # Late hazard metrics
-        late_mask = (bin_starts >= late_time_start) & (
-            bin_starts <= late_time_end)
-        mean_late_hazard = hazard_values[late_mask].mean(
-        ) if late_mask.any() else 0
+        late_mask = (bin_starts >= late_time_start) & (bin_starts <= late_time_end)
+        mean_late_hazard = hazard_values[late_mask].mean() if late_mask.any() else 0
 
         # Hazard ratio
         hazard_ratio = (
@@ -1055,7 +1064,7 @@ def get_user_input(
         file_paths (dict[str, str]): Paths to required input files.
 
     Returns:
-        tuple: Contains spike times, spike clusters, group labels array, 
+        tuple: Contains spike times, spike clusters, group labels array,
         and user filtering selections.
     """
     spike_times_path = file_paths["spike_times.npy"]
@@ -1066,8 +1075,7 @@ def get_user_input(
     channels_to_include, labels_to_include = channels_or_labels_to_export()
 
     # Load raw spike data
-    spike_times, spike_clusters = load_spike_data(
-        spike_times_path, spike_clusters_path)
+    spike_times, spike_clusters = load_spike_data(spike_times_path, spike_clusters_path)
     group_labels_array = create_label_lookup(group_labels_path)
 
     return (
@@ -1108,8 +1116,7 @@ def process_filtered_data(
     )
 
     max_time = (
-        np.max(filtered_spike_times) /
-        30000 if len(filtered_spike_times) > 0 else 0
+        np.max(filtered_spike_times) / 30000 if len(filtered_spike_times) > 0 else 0
     )
     print(f"Recording length: {max_time:.2f}s")
 
@@ -1121,7 +1128,7 @@ def prepare_filtered_data(file_paths: dict) -> tuple[pd.DataFrame, float]:
     Loads spike data, applies user-specified filters, and prepares the recording DataFrame.
 
     Parameters:
-        file_paths (dict): Dictionary containing paths to required files 
+        file_paths (dict): Dictionary containing paths to required files
         (e.g., spike times, clusters).
 
     Returns:
@@ -1177,7 +1184,7 @@ def get_user_parameters(
 
     baseline_start, baseline_end = prompt_for_baseline(max_time, min_time)
     print(
-        f'''Analyzing data from {start_time}s to {end_time}s with bin size {bin_size}s'''
+        f"""Analyzing data from {start_time}s to {end_time}s with bin size {bin_size}s"""
     )
     if drug_time:
         print(f"Drug application time: {drug_time:.2f}s")
@@ -1214,7 +1221,7 @@ def main():
         end_time,
         30000,  # sample_rate
         baseline_start,
-        baseline_end
+        baseline_end,
     )
 
     # Export spike times and firing rates
@@ -1229,17 +1236,23 @@ def main():
     )
 
     # Perform ISI and hazard analysis
-    isi_df, baseline_isi_df = calculate_isi_histogram(raw_fr_dict, baseline_start,
-                                     baseline_end)
-    
-    hazard_df, hazard_summary_df, baseline_hazard_df, baseline_hazard_summary_df = calculate_hazard_function(
-        isi_df, baseline_isi_df
+    isi_df, baseline_isi_df = calculate_isi_histogram(
+        raw_fr_dict, baseline_start, baseline_end
+    )
+
+    hazard_df, hazard_summary_df, baseline_hazard_df, baseline_hazard_summary_df = (
+        calculate_hazard_function(isi_df, baseline_isi_df)
     )
 
     # Export hazard and ISI analysis, including baseline data if available
     export_hazard_excel(
-        export_dir, hazard_df, hazard_summary_df, isi_df,
-        baseline_isi_df, baseline_hazard_df, baseline_hazard_summary_df
+        export_dir,
+        hazard_df,
+        hazard_summary_df,
+        isi_df,
+        baseline_isi_df,
+        baseline_hazard_df,
+        baseline_hazard_summary_df,
     )
 
 
