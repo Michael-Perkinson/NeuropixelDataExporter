@@ -233,12 +233,25 @@ def create_label_lookup(group_labels_path: str) -> np.ndarray:
         np.ndarray: An array where each index corresponds to a cluster ID and its value is the group label.
                     Unmapped indices are labeled as "unknown".
     """
+    # Check for the correct group label column
+    group_label_column = None
+    
     cluster_group = pd.read_csv(group_labels_path, sep="\t")
     max_cluster_id = cluster_group["cluster_id"].max() + 1
     group_labels_array = np.full(max_cluster_id, "unknown", dtype=object)
-    group_labels_array[cluster_group["cluster_id"].values] = cluster_group[
-        "group"
-    ].values
+    
+    if "group" in cluster_group.columns:
+        group_label_column = "group"
+    elif "KSLabel" in cluster_group.columns:
+        group_label_column = "KSLabel"
+    else:
+        raise ValueError(
+            "Neither 'group' nor 'KSLabel' column found in the group labels dataframe.")
+
+    # Assign the values from the appropriate column
+    group_labels_array[cluster_group["cluster_id"]
+                    .values] = cluster_group[group_label_column].values
+
     return group_labels_array
 
 
@@ -804,6 +817,8 @@ def create_firing_rate_dataframes(
 
 def calculate_isi_histogram(
     data_export: dict[int, np.ndarray],
+    baseline_start: float | None = None,
+    baseline_end: float | None = None,
     time_bin: float = 0.01,
     max_isi_time: float = 0.75,
 ) -> pd.DataFrame:
@@ -811,47 +826,69 @@ def calculate_isi_histogram(
     Calculates interspike interval (ISI) histograms for each cluster.
 
     Parameters:
-        data_export (dict[int, np.ndarray]): Dictionary where keys are channel IDs and
-                                             values are arrays of spike times (in milliseconds).
+        data_export (dict[int, np.ndarray]): Dictionary where keys are cluster IDs (integers) and
+                                            values are arrays of spike times (in milliseconds).
+        baseline_start (float, optional): Start time (in seconds) for the baseline period. If None, no baseline is considered.
+        baseline_end (float, optional): End time (in seconds) for the baseline period. If None, no baseline is considered.
         time_bin (float, optional): Bin width for the ISI histogram (in seconds). Default is 0.01s.
         max_isi_time (float, optional): Maximum ISI (in seconds) to include in the histogram. Default is 0.75s.
 
     Returns:
-        pd.DataFrame: A DataFrame containing:
-            - 'Bin_Starts': The left edges of each ISI bin (from 0 to max_isi_time).
-            - One column per cluster: Counts of ISIs falling into each bin.
+        tuple:
+            - pd.DataFrame: A DataFrame containing:
+                - 'Bin_Starts': The left edges of each ISI bin (from 0 to max_isi_time).
+                - One column per cluster: Counts of ISIs falling into each bin.
+            - pd.DataFrame | None: If baseline is provided, a DataFrame containing baseline ISI histograms. Otherwise, None.
     """
+    baseline_data = {} if baseline_start is not None else None
+    
     n_bins = int(max_isi_time / time_bin)
     bin_edges = np.arange(0, (n_bins + 1) * time_bin, time_bin)
     isi_data = {"Bin_Starts": bin_edges[:-1]}
 
-    # Iterate through the raw data (raw cluster IDs)
     for channel, spikes in data_export.items():
-        # Convert ms -> s, then compute interspike intervals
+        # Compute ISIs for the entire time period
         spikes_in_seconds = spikes / 1000.0
         isis = np.diff(spikes_in_seconds)
         isi_histogram, _ = np.histogram(isis, bins=bin_edges)
-
-        # Store the histogram for the cluster using its raw ID
         isi_data[channel] = isi_histogram
 
-    # Before returning, format the cluster IDs to 'Cluster_X'
-    formatted_columns = {
-        "Bin_Starts": isi_data["Bin_Starts"]
-    }
+        # If baseline is provided, calculate ISI for the baseline period
+        if baseline_data is not None:
+            baseline_spikes = spikes_in_seconds[
+                (spikes_in_seconds >= baseline_start) & (
+                    spikes_in_seconds <= baseline_end)
+            ]
+            baseline_isis = np.diff(baseline_spikes)
+            baseline_histogram, _ = np.histogram(baseline_isis, bins=bin_edges)
+            baseline_data[channel] = baseline_histogram
 
+    # Formatting the DataFrame
+    formatted_columns = {"Bin_Starts": isi_data["Bin_Starts"]}
+    
     for key, value in isi_data.items():
         if key != "Bin_Starts":
             formatted_columns[f"Cluster_{key}"] = value
 
-    return pd.DataFrame(formatted_columns)
+    baseline_isi_df = None
+    if baseline_data:
+        baseline_data["Bin_Starts"] = bin_edges[:-1]
+        baseline_columns = {"Bin_Starts": baseline_data["Bin_Starts"]}
+        for key, value in baseline_data.items():
+            if key != "Bin_Starts":
+                baseline_columns[f"Cluster_{key}_Baseline"] = value
+        baseline_isi_df = pd.DataFrame(baseline_columns)
 
+    return pd.DataFrame(formatted_columns), baseline_isi_df
 
 def export_hazard_excel(
     export_dir: str,
     hazard_df: pd.DataFrame,
     hazard_summary_df: pd.DataFrame,
     isi_df: pd.DataFrame,
+    baseline_isi_df: pd.DataFrame | None = None,
+    baseline_hazard_df: pd.DataFrame | None = None,
+    baseline_hazard_summary_df: pd.DataFrame | None = None,
 ) -> None:
     """
     Exports hazard and ISI analysis data to an Excel file with multiple sheets.
@@ -867,6 +904,7 @@ def export_hazard_excel(
         hazard_df (pd.DataFrame): DataFrame containing hazard function values for each channel.
         hazard_summary_df (pd.DataFrame): DataFrame with summary metrics of the hazard function.
         isi_df (pd.DataFrame): DataFrame containing ISI histograms.
+        baseline_df (pd.DataFrame): DataFrame containing baseline hazard function values.
 
     Returns:
         None: The function writes the Excel file to `export_dir` and prints a confirmation message.
@@ -879,15 +917,27 @@ def export_hazard_excel(
         hazard_summary_df.to_excel(
             writer, sheet_name="Hazard_Summary", index=False)
 
+        # Write baseline data if available
+        if baseline_isi_df is not None:
+            baseline_isi_df.to_excel(
+                writer, sheet_name="Baseline_ISI_Histogram", index=False)
+        if baseline_hazard_df is not None:
+            baseline_hazard_df.to_excel(
+                writer, sheet_name="Baseline_Hazard_Function", index=False)
+        if baseline_hazard_summary_df is not None:
+            baseline_hazard_summary_df.to_excel(
+                writer, sheet_name="Baseline_Hazard_Summary", index=False)
+
     print(f"ISI and hazard data exported to {excel_path}")
 
 
 def calculate_hazard_function(
     isi_df: pd.DataFrame,
+    baseline_isi_df: pd.DataFrame | None = None,
     early_time: float = 0.07,
     late_time_start: float = 0.41,
     late_time_end: float = 0.5,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame | None, pd.DataFrame | None]:
     """
     Calculates hazard function values for each channel and key hazard metrics.
 
@@ -895,6 +945,7 @@ def calculate_hazard_function(
         isi_df (pd.DataFrame): DataFrame containing ISI histogram data. Should have:
             - 'Bin_Starts': Left edges of ISI bins.
             - One column per channel with ISI histogram counts.
+        baseline_isi_df (pd.DataFrame | None): Optional DataFrame for baseline ISI histogram data.
         early_time (float): Upper threshold (in seconds) for the "early" hazard region.
         late_time_start (float): Start of the "late" hazard region (in seconds).
         late_time_end (float): End of the "late" hazard region (in seconds).
@@ -902,23 +953,32 @@ def calculate_hazard_function(
     Returns:
         tuple:
             - pd.DataFrame: Hazard function values with 'Bin_Starts' and one column per channel.
-            - pd.DataFrame: Hazard summary metrics for each channel, including:
-                - 'Cluster': Channel name.
-                - 'Peak Early Hazard': Maximum hazard value in the early region.
-                - 'Mean Late Hazard': Average hazard value in the late region.
-                - 'Hazard Ratio': Ratio of peak early hazard to mean late hazard.
+            - pd.DataFrame: Hazard summary metrics for each channel.
+            - pd.DataFrame | None: Baseline hazard function values, or None if no baseline provided.
+            - pd.DataFrame | None: Baseline hazard summary metrics, or None if no baseline provided.
     """
-    bin_starts = isi_df["Bin_Starts"].values
+    # Calculate hazard function for the main ISI data
+    isi_bin_starts = isi_df["Bin_Starts"].values
+    hazard_df = compute_hazard_values(isi_df, isi_bin_starts)
 
-    # Compute hazard values for all channels
-    hazard_df = compute_hazard_values(isi_df, bin_starts)
-
-    # Compute summary metrics
+    # Compute summary metrics for main data
     hazard_summary_df = compute_hazard_summary(
-        hazard_df, bin_starts, early_time, late_time_start, late_time_end
+        hazard_df, isi_bin_starts, early_time, late_time_start, late_time_end
     )
 
-    return hazard_df, hazard_summary_df
+    # If baseline ISI data is provided, calculate baseline hazard functions and metrics
+    if baseline_isi_df is not None:
+        baseline_isi_bin_starts = baseline_isi_df["Bin_Starts"].values
+        baseline_hazard_df = compute_hazard_values(
+            baseline_isi_df, baseline_isi_bin_starts)
+        baseline_hazard_summary_df = compute_hazard_summary(
+            baseline_hazard_df, baseline_isi_bin_starts, early_time, late_time_start, late_time_end
+        )
+        return hazard_df, hazard_summary_df, baseline_hazard_df, baseline_hazard_summary_df
+
+    # If no baseline ISI data, return None for baseline data
+    return hazard_df, hazard_summary_df, None, None
+
 
 
 def compute_hazard_values(isi_df: pd.DataFrame, bin_starts: np.ndarray) -> pd.DataFrame:
@@ -1169,11 +1229,18 @@ def main():
     )
 
     # Perform ISI and hazard analysis
-    isi_df = calculate_isi_histogram(raw_fr_dict)
-    hazard_df, hazard_summary_df = calculate_hazard_function(isi_df)
+    isi_df, baseline_isi_df = calculate_isi_histogram(raw_fr_dict, baseline_start,
+                                     baseline_end)
+    
+    hazard_df, hazard_summary_df, baseline_hazard_df, baseline_hazard_summary_df = calculate_hazard_function(
+        isi_df, baseline_isi_df
+    )
 
-    # Export hazard and ISI analysis
-    export_hazard_excel(export_dir, hazard_df, hazard_summary_df, isi_df)
+    # Export hazard and ISI analysis, including baseline data if available
+    export_hazard_excel(
+        export_dir, hazard_df, hazard_summary_df, isi_df,
+        baseline_isi_df, baseline_hazard_df, baseline_hazard_summary_df
+    )
 
 
 if __name__ == "__main__":
