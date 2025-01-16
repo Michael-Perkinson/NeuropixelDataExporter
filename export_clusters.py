@@ -29,7 +29,7 @@ def file_chooser() -> str | None:
         print("No folder selected.")
         return None
 
-    print(f"Selected folder: {folder_path}")
+    print(f'''Selected folder: {folder_path}''')
     return folder_path
 
 
@@ -75,7 +75,8 @@ def choose_and_validate_folder() -> dict[str, str]:
             file for file in REQUIRED_FILES if file not in file_paths]
 
         if missing_files:
-            print(f"Error: Missing required files: {', '.join(missing_files)}")
+            print(
+                f'''Error: Missing required files: {', '.join(missing_files)}''')
             print("Please select another folder or cancel to exit.")
         else:
             return file_paths
@@ -260,9 +261,8 @@ def filter_by_labels(
     valid_cluster_ids = np.where(
         np.isin(group_labels_array, labels_to_include))[0]
     print(
-        f"Filtered cluster IDs for labels {
-            labels_to_include}: "
-        f"{valid_cluster_ids}"
+        f'''Filtered cluster IDs for labels
+        {labels_to_include}: {valid_cluster_ids}'''
     )
     return np.isin(spike_clusters, valid_cluster_ids)
 
@@ -557,14 +557,12 @@ def export_firing_rate_html(
         # Save HTML file
         html_path = os.path.join(
             images_export_dir,
-            f"Firing_Rate_Cluster_{
-                channel}_BinSize_{bin_size}s.html",
+            f'''Firing_Rate_Cluster_{channel}_BinSize_{bin_size}s.html''',
         )
         fig.write_html(html_path)
 
     print(
-        f"Interactive firing rate HTMLs for clusters saved to {
-            images_export_dir}"
+        f'''Interactive firing rate HTMLs for clusters saved to {images_export_dir}'''
     )
 
 
@@ -1119,8 +1117,7 @@ def get_user_parameters(
 
     baseline_start, baseline_end = prompt_for_baseline(max_time, min_time)
     print(
-        f"Analyzing data from {start_time}s to {
-            end_time}s with bin size {bin_size}s"
+        f'''Analyzing data from {start_time}s to {end_time}s with bin size {bin_size}s'''
     )
     if drug_time:
         print(f"Drug application time: {drug_time:.2f}s")
