@@ -11,6 +11,7 @@ Neuropixel Data Exporter is a tool for analyzing and exporting Neuropixel spike 
 - **Spike Time Filtering**: Filter spikes based on specified time ranges and drug application time.
 - **Firing Rate Calculation**: Calculate firing rates for each cluster using user-defined time bins.
 - **ISI Histogram & Hazard Function**: Generate ISI histograms and calculate hazard functions with summary metrics.
+- **Baseline Analysis**: Includes the option to calculate ISI and hazard functions for baseline data and exports them to separate sheets for comparison.
 - **Delta Firing Rates**: Compute delta firing rates relative to a baseline period, if specified.
 - **Data Export**: Save spike times, firing rates, ISI histograms, and hazard functions as structured CSV files, Excel files, and text files.
 - **Interactive Plots**: Generate HTML plots of firing rates for each cluster with optional drug application markers.
@@ -118,6 +119,10 @@ See the detailed update history in the [CHANGELOG.md](CHANGELOG.md).
      - `firing_rates_by_cluster.csv`: Firing rates (in Hz) for each cluster over time.
    - **HTML Plots**: Interactive HTML plots of firing rates for each cluster, saved in a `firing_rate_images` folder.
    - **TXT Files**: For importing directly into Clampfit for offline analysis, saved in a `txt_files_for_clampfit_import` folder.
+   - - **Baseline Data**: If baseline analysis is performed, separate sheets will include:
+       - `Baseline_ISI_Histogram`: Interspike interval histogram data for baseline period.
+       - `Baseline_Hazard_Function`: Hazard function values for baseline period.
+       - `Baseline_Hazard_Summary`: Summary metrics for baseline hazard function.
 
 This tool provides a streamlined process for analyzing Neuropixel spike data, with outputs designed for easy data interpretation and visualization.
 

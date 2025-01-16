@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0] - 2025-01-16
+
+### Added
+
+- Added support for baseline ISI and hazard function calculations, enabling separate analysis of baseline and post-drug data.
+- Exported baseline ISI and hazard analysis to seperate sheets in the Excel output file if baseline data is available.
+- Updated `calculate_hazard_function` to handle baseline ISI data and produce separate hazard analysis for baseline and post-treatment data.
+
 ## [1.2.0] - 2025-01-16
 
 ### Added
