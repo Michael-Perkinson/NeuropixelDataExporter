@@ -725,6 +725,22 @@ def calculate_firing_rate(
 
     return raw_data, delta_data
 
+def sort_cluster_columns(cluster_columns: list[str]) -> list[str]:
+    """
+    Sorts cluster columns numerically based on the cluster ID.
+    
+    Parameters:
+        cluster_columns (list[str]): List of cluster column names.
+        
+    Returns:
+        list[str]: Sorted cluster column names.
+    """
+    # Sort cluster columns numerically based on raw_data
+    sorted_cluster_columns = sorted(
+        [col for col in cluster_columns if col.startswith("Cluster_")],
+        key=lambda x: int(x.split("_")[1]),
+    )
+    return sorted_cluster_columns
 
 def create_firing_rate_dataframes(
     raw_data: dict[str, np.ndarray], delta_data: dict[str, np.ndarray] | None
@@ -741,11 +757,7 @@ def create_firing_rate_dataframes(
             - pd.DataFrame: Sorted DataFrame of raw firing rates.
             - pd.DataFrame | None: Sorted DataFrame of delta firing rates, or None.
     """
-    # Sort cluster columns numerically based on raw_data
-    sorted_cluster_columns = sorted(
-        [col for col in raw_data.keys() if col.startswith("Cluster_")],
-        key=lambda x: int(x.split("_")[1]),
-    )
+    sorted_cluster_columns = sort_cluster_columns(raw_data)
     sorted_columns = ["Time Intervals (s)"] + sorted_cluster_columns
 
     # Create raw DataFrame
@@ -771,7 +783,7 @@ def calculate_isi_histogram(
     max_isi_time: float = 0.75,
 ) -> pd.DataFrame:
     """
-    Calculates interspike interval (ISI) histograms for each channel.
+    Calculates interspike interval (ISI) histograms for each cluster.
 
     Parameters:
         data_export (dict[int, np.ndarray]): Dictionary where keys are channel IDs and
@@ -782,20 +794,33 @@ def calculate_isi_histogram(
     Returns:
         pd.DataFrame: A DataFrame containing:
             - 'Bin_Starts': The left edges of each ISI bin (from 0 to max_isi_time).
-            - One column per channel: Counts of ISIs falling into each bin.
+            - One column per cluster: Counts of ISIs falling into each bin.
     """
     n_bins = int(max_isi_time / time_bin)
     bin_edges = np.arange(0, (n_bins + 1) * time_bin, time_bin)
     isi_data = {"Bin_Starts": bin_edges[:-1]}
 
+    # Iterate through the raw data (raw cluster IDs)
     for channel, spikes in data_export.items():
         # Convert ms -> s, then compute interspike intervals
         spikes_in_seconds = spikes / 1000.0
         isis = np.diff(spikes_in_seconds)
         isi_histogram, _ = np.histogram(isis, bins=bin_edges)
+
+        # Store the histogram for the cluster using its raw ID
         isi_data[channel] = isi_histogram
 
-    return pd.DataFrame(isi_data)
+    # Before returning, format the cluster IDs to 'Cluster_X'
+    formatted_columns = {
+        "Bin_Starts": isi_data["Bin_Starts"]
+    }
+
+    for key, value in isi_data.items():
+        if key != "Bin_Starts":
+            formatted_columns[f"Cluster_{key}"] = value
+
+    return pd.DataFrame(formatted_columns)
+
 
 
 def export_hazard_excel(
@@ -1089,13 +1114,13 @@ def main():
 
     # Extract data for analysis
     raw_fr_dict, baseline_fr_dict = extract_data(
-        df=recording_dataframe,
-        drug_time=drug_time,
-        start_time=start_time,
-        end_time=end_time,
-        sample_rate=30000,
-        baseline_start=baseline_start,
-        baseline_end=baseline_end,
+        recording_dataframe,
+        drug_time,
+        start_time,
+        end_time,
+        30000,  # sample_rate
+        baseline_start,
+        baseline_end
     )
 
     # Export spike times and firing rates
