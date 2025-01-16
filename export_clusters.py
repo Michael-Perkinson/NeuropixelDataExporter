@@ -413,7 +413,8 @@ def export_data(
     baseline_fr_dict: dict[int, float | None],
     folder_path: str,
     bin_size: float,
-    max_time: float,
+    start_time: float,
+    end_time: float,
     drug_time: float | None,
 ) -> str:
     """
@@ -430,7 +431,7 @@ def export_data(
                                                     baseline firing rates. None if unavailable.
         folder_path (str): The base folder path where the export directory will be created.
         bin_size (float): The size of time bins (in seconds) for calculating firing rates.
-        max_time (float): The maximum time (in seconds) for spike time analysis.
+        end_time (float): The maximum time (in seconds) for spike time analysis.
         drug_time (float | None): The time (in seconds) when the drug was applied, if any.
 
     Returns:
@@ -452,7 +453,7 @@ def export_data(
 
     # Calculate firing rates
     raw_data, delta_data = calculate_firing_rate(
-        data_export, bin_size, max_time, baseline_fr_dict
+        data_export, bin_size, start_time, end_time, baseline_fr_dict
     )
 
     df_raw, df_delta = create_firing_rate_dataframes(raw_data, delta_data)
@@ -703,7 +704,8 @@ def shift_spike_times(spikes: np.ndarray, drug_time: float | None) -> np.ndarray
 def calculate_firing_rate(
     data_export: dict[int, np.ndarray],
     bin_size: float,
-    max_time: float,
+    start_time: float,
+    end_time: float,
     baseline_fr_dict: dict[int, float | None] | None = None,
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray] | None]:
     """
@@ -713,7 +715,8 @@ def calculate_firing_rate(
         data_export (dict[int, np.ndarray]): Dictionary where keys are cluster IDs and
                                              values are arrays of spike times in milliseconds.
         bin_size (float): Bin size for firing rate calculation (in seconds).
-        max_time (float): Maximum time for the analysis window (in seconds).
+        start_time (float): Start time for the analysis window (in seconds).
+        end_time (float): Maximum time for the analysis window (in seconds).
         baseline_fr_dict (dict[int, float | None] | None, optional): Dictionary mapping cluster IDs
                                                                      to baseline firing rates (spikes/s).
 
@@ -722,8 +725,8 @@ def calculate_firing_rate(
             - dict[str, np.ndarray]: Raw firing rates dictionary, including bin times and cluster rates.
             - dict[str, np.ndarray] | None: Delta firing rates dictionary, or None if no baseline provided.
     """
-    bins = np.arange(0, max_time + bin_size, bin_size)
-    if bins[-1] > max_time:
+    bins = np.arange(start_time, end_time + bin_size, bin_size)
+    if bins[-1] > end_time:
         bins = bins[:-1]
 
     raw_data = {"Time Intervals (s)": bins[:-1]}
@@ -1163,7 +1166,8 @@ def main():
         baseline_fr_dict,
         os.path.dirname(file_paths["spike_times.npy"]),
         bin_size,
-        max_time,
+        start_time,
+        end_time,
         drug_time,
     )
 
