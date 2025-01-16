@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 import openpyxl
 
 
-def file_chooser():
+def file_chooser() -> str | None:
     """
     Prompts the user to select a folder within the current script's directory.
 
@@ -32,7 +32,7 @@ def file_chooser():
     return folder_path
 
 
-def read_npy_file(file_path):
+def read_npy_file(file_path: str) -> np.ndarray | None:
     """
     Reads a .npy file from the specified file path.
 
@@ -50,7 +50,7 @@ def read_npy_file(file_path):
     return None
 
 
-def load_selected_channels(spike_times_path, spike_clusters_path, channels):
+def load_selected_channels(spike_times_path: str, spike_clusters_path: str, channels: list[int]) -> tuple[dict[int, np.ndarray], int]:
     """
     Loads spike times and clusters, filtering by selected channels with spikes.
 
@@ -88,7 +88,7 @@ def load_selected_channels(spike_times_path, spike_clusters_path, channels):
     return selected_spikes, sample_rate
 
 
-def channels_to_export():
+def channels_to_export() -> list[int]:
     """
     Prompts user for channels to export, retaining only numeric identifiers.
 
@@ -103,7 +103,7 @@ def channels_to_export():
     return channels
 
 
-def drug_application_time():
+def drug_application_time() -> float | None:
     """
     Prompts the user to enter the drug application time in seconds or skip if not provided.
 
@@ -119,7 +119,7 @@ def drug_application_time():
         return None
 
 
-def start_and_end_time(max_time):
+def start_and_end_time(max_time: float) -> tuple[float, float]:
     """
     Prompts the user to enter start and end times for a plot, defaulting to the full range if omitted.
 
@@ -143,7 +143,7 @@ def start_and_end_time(max_time):
         return 0.0, max_time
 
 
-def extract_data(selected_spikes, drug_time, start_time, end_time, sample_rate):
+def extract_data(selected_spikes: dict[int, np.ndarray], drug_time: float | None, start_time: float, end_time: float, sample_rate: int) -> dict[int, np.ndarray]:
     """
     Filters spike times by specified start and end times, adjusting relative to drug application if provided.
 
@@ -178,7 +178,7 @@ def extract_data(selected_spikes, drug_time, start_time, end_time, sample_rate):
     return data_export
 
 
-def calculate_firing_rate(data_export, bin_size, max_time):
+def calculate_firing_rate(data_export: dict[int, np.ndarray], bin_size: float, max_time: float) -> pd.DataFrame:
     """
     Calculates firing rates for each cluster using specified bin size.
 
@@ -206,7 +206,7 @@ def calculate_firing_rate(data_export, bin_size, max_time):
     return pd.DataFrame(firing_rates)
 
 
-def calculate_isi_histogram(data_export, time_bin=0.01, max_isi_time=0.75):
+def calculate_isi_histogram(data_export: dict[int, np.ndarray], time_bin: float = 0.01, max_isi_time: float = 0.75) -> pd.DataFrame:
     """
     Calculates interspike interval (ISI) histograms for each channel.
 
@@ -231,7 +231,7 @@ def calculate_isi_histogram(data_export, time_bin=0.01, max_isi_time=0.75):
     return pd.DataFrame(isi_data)
 
 
-def calculate_hazard_function(isi_df, early_time=0.07, late_time_start=0.41, late_time_end=0.5):
+def calculate_hazard_function(isi_df: pd.DataFrame, early_time: float = 0.07, late_time_start: float = 0.41, late_time_end: float = 0.5) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Calculates hazard function values for each channel and key hazard metrics.
 
@@ -280,7 +280,7 @@ def calculate_hazard_function(isi_df, early_time=0.07, late_time_start=0.41, lat
     return hazard_df, hazard_summary_df
 
 
-def export_firing_rate_html(firing_rate_df, images_export_dir, bin_size, drug_time=None):
+def export_firing_rate_html(firing_rate_df: pd.DataFrame, images_export_dir: str, bin_size: float, drug_time: float | None) -> None:
     """
     Creates and exports interactive HTML plots for each cluster's firing rate with bin size in title and file name.
 
@@ -337,7 +337,7 @@ def export_firing_rate_html(firing_rate_df, images_export_dir, bin_size, drug_ti
     print(f"Interactive firing rate HTMLs for Channels saved to {html_path}")
 
 
-def export_data(data_export, folder_path, bin_size, max_time, drug_time):
+def export_data(data_export: dict[int, np.ndarray], folder_path: str, bin_size: float, max_time: float, drug_time: float | None) -> str:
     """
     Exports filtered spike times and firing rates to structured CSV files, individual text files for each cluster, 
     and HTML plots.
@@ -400,7 +400,7 @@ def export_data(data_export, folder_path, bin_size, max_time, drug_time):
     return export_dir
 
 
-def export_hazard_excel(folder_path, export_dir, hazard_df, hazard_summary_df, isi_df):
+def export_hazard_excel(folder_path: str, export_dir: str, hazard_df: pd.DataFrame, hazard_summary_df: pd.DataFrame, isi_df: pd.DataFrame) -> None:
     """
     Exports hazard function data, summary metrics, and ISI data to a single Excel file.
 
