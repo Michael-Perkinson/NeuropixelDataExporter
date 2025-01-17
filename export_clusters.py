@@ -131,11 +131,21 @@ def prompt_for_baseline(
     max_time: float, min_time: float = 0
 ) -> tuple[float, float] | tuple[None, None]:
     """
-    Asks the user if they want to specify a baseline time range.
-    Returns (None, None) if no baseline is specified.
-    Otherwise returns (baseline_start, baseline_end).
+    Prompts the user to specify a baseline time range.
 
-    The minimum baseline time is adjusted if the start time is greater than 0.
+    If the user chooses to specify a baseline, this function validates the input
+    and ensures the baseline start and end times fall within the specified bounds.
+    If the user skips the baseline or provides invalid input, it returns `(None, None)`.
+
+    Parameters:
+        max_time (float): The maximum allowable time for the baseline period.
+        min_time (float, optional): The minimum allowable time for the baseline period.
+                                    Defaults to 0.
+
+    Returns:
+        tuple[float, float] | tuple[None, None]:
+            - A tuple containing (baseline_start, baseline_end) if a valid baseline is specified.
+            - `(None, None)` if no baseline is specified or if the input is invalid.
     """
     if (
         input("Do you want to specify a baseline period? (y/n): ").strip().lower()
@@ -147,7 +157,9 @@ def prompt_for_baseline(
         baseline_start = float(
             input(f"""Enter baseline start time (>= {min_time:.2f}s): """)
         )
-        baseline_end = float(input(f"""Enter baseline end time (<= {max_time:.2f}s): """))
+        baseline_end = float(
+            input(f"""Enter baseline end time (<= {max_time:.2f}s): """)
+        )
 
         # Ensure the baseline start time is greater than or equal to min_time
         if baseline_start < min_time:
@@ -471,8 +483,7 @@ def export_data(
     export_dir = create_export_dir(folder_path, analysis_folder_name)
 
     # Filter out clusters with zero spikes
-    data_export = {cid: arr for cid,
-                   arr in data_export.items() if len(arr) > 0}
+    data_export = {cid: arr for cid, arr in data_export.items() if len(arr) > 0}
     if not data_export:
         print("No spikes to export. Exiting.")
         return export_dir
@@ -489,8 +500,7 @@ def export_data(
 
     # Calculate baseline statistics
     if baseline_start is not None and baseline_end is not None:
-        baseline_bins = np.arange(
-            baseline_start, baseline_end + bin_size, bin_size)
+        baseline_bins = np.arange(baseline_start, baseline_end + bin_size, bin_size)
         baseline_stats = []
 
         for channel, spikes in data_export.items():
@@ -512,13 +522,12 @@ def export_data(
         baseline_stats_df = pd.DataFrame(baseline_stats)
         print(baseline_stats_df.columns)
         # Sort cluster names using your custom function
-        sorted_clusters = sort_cluster_columns(
-            baseline_stats_df["Cluster"].tolist())
-        baseline_stats_df = baseline_stats_df.set_index(
-            "Cluster").loc[sorted_clusters].reset_index()
-        
-        baseline_start_fmt = f"""{baseline_start:.2f}""".rstrip(
-            "0").rstrip(".")
+        sorted_clusters = sort_cluster_columns(baseline_stats_df["Cluster"].tolist())
+        baseline_stats_df = (
+            baseline_stats_df.set_index("Cluster").loc[sorted_clusters].reset_index()
+        )
+
+        baseline_start_fmt = f"""{baseline_start:.2f}""".rstrip("0").rstrip(".")
         baseline_end_fmt = f"""{baseline_end:.2f}""".rstrip("0").rstrip(".")
         sheet_name = f"""Baseline_Stats ({baseline_start_fmt}s - {baseline_end_fmt}s)"""
 
@@ -528,14 +537,12 @@ def export_data(
     with ExcelWriter(xlsx_path) as writer:
         df_raw.to_excel(writer, sheet_name="Firing_Rates_Raw", index=False)
         if df_delta is not None and len(df_delta.columns) > 1:
-            df_delta.to_excel(
-                writer, sheet_name="Delta_from_Baseline", index=False)
+            df_delta.to_excel(writer, sheet_name="Delta_from_Baseline", index=False)
         if baseline_start is not None and baseline_end is not None:
-            baseline_stats_df.to_excel(
-                writer, sheet_name=sheet_name, index=False
-            )
+            baseline_stats_df.to_excel(writer, sheet_name=sheet_name, index=False)
     print(
-        f"""Firing rates (raw/delta) and baseline statistics exported to {xlsx_path}""")
+        f"""Firing rates (raw/delta) and baseline statistics exported to {xlsx_path}"""
+    )
 
     # Export firing rate plots
     images_dir = os.path.join(export_dir, "firing_rate_images")
@@ -544,6 +551,7 @@ def export_data(
     print(f"""Interactive firing rate plots exported to {images_dir}""")
 
     return export_dir
+
 
 def export_firing_rate_html(
     firing_rate_df: pd.DataFrame,
@@ -1315,9 +1323,6 @@ def main():
         baseline_start,
         baseline_end,
     )
-
-    if baseline_start is not None:
-        formated_export_dir = highlight_baseline_data(export_dir)
 
     # Perform ISI and hazard analysis
     isi_df, baseline_isi_df = calculate_isi_histogram(
