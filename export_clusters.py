@@ -432,33 +432,22 @@ def export_data(
     start_time: float,
     end_time: float,
     drug_time: float | None,
+    baseline_start: float | None,
+    baseline_end: float | None,
 ) -> str:
     """
     Orchestrates the export of analyzed spike data, firing rates, and interactive plots.
 
-    This function creates an export directory, saves spike times as CSV and text files,
-    calculates raw and delta firing rates, saves them to an Excel file, and generates
-    interactive HTML plots for firing rates.
-
-    Parameters:
-        data_export (dict[int, np.ndarray]): A dictionary where keys are cluster IDs and
-                                             values are arrays of spike times (in milliseconds).
-        baseline_fr_dict (dict[int, float | None]): A dictionary mapping cluster IDs to their
-                                                    baseline firing rates. None if unavailable.
-        folder_path (str): The base folder path where the export directory will be created.
-        bin_size (float): The size of time bins (in seconds) for calculating firing rates.
-        end_time (float): The maximum time (in seconds) for spike time analysis.
-        drug_time (float | None): The time (in seconds) when the drug was applied, if any.
-
-    Returns:
-        str: The path to the export directory where all files were saved.
+    Adds a baseline statistics sheet to the Excel file, summarizing mean and standard
+    deviation of firing rates for each cluster during the baseline period.
     """
     # Create export directory
     analysis_folder_name = f"{os.path.basename(folder_path)}_analysed"
     export_dir = create_export_dir(folder_path, analysis_folder_name)
 
     # Filter out clusters with zero spikes
-    data_export = {cid: arr for cid, arr in data_export.items() if len(arr) > 0}
+    data_export = {cid: arr for cid,
+                   arr in data_export.items() if len(arr) > 0}
     if not data_export:
         print("No spikes to export. Exiting.")
         return export_dir
@@ -472,13 +461,54 @@ def export_data(
     )
 
     df_raw, df_delta = create_firing_rate_dataframes(raw_data, delta_data)
-    # Export firing rates to Excel
+
+    # Calculate baseline statistics
+    if baseline_start is not None and baseline_end is not None:
+        baseline_bins = np.arange(
+            baseline_start, baseline_end + bin_size, bin_size)
+        baseline_stats = []
+
+        for channel, spikes in data_export.items():
+            # Convert spike times to seconds
+            spike_times_sec = spikes / 1000.0
+            # Calculate firing rates for baseline bins
+            counts, _ = np.histogram(spike_times_sec, bins=baseline_bins)
+            firing_rates = counts / bin_size
+            # Append statistics
+            baseline_stats.append(
+                {
+                    "Cluster": f"Cluster_{channel}",
+                    "Mean Firing Rate": np.mean(firing_rates),
+                    "Standard Deviation": np.std(firing_rates),
+                }
+            )
+
+        # Convert stats to DataFrame
+        baseline_stats_df = pd.DataFrame(baseline_stats)
+        print(baseline_stats_df.columns)
+        # Sort cluster names using your custom function
+        sorted_clusters = sort_cluster_columns(
+            baseline_stats_df["Cluster"].tolist())
+        baseline_stats_df = baseline_stats_df.set_index(
+            "Cluster").loc[sorted_clusters].reset_index()
+
+    # Export firing rates and baseline statistics to Excel
     xlsx_path = os.path.join(export_dir, "firing_rates_by_cluster.xlsx")
+    baseline_start_fmt = f"{baseline_start:.2f}".rstrip("0").rstrip(".")
+    baseline_end_fmt = f"{baseline_end:.2f}".rstrip("0").rstrip(".")
+    sheet_name = f"""Baseline_Stats ({baseline_start_fmt}s - {baseline_end_fmt}s)"""
+
     with ExcelWriter(xlsx_path) as writer:
         df_raw.to_excel(writer, sheet_name="Firing_Rates_Raw", index=False)
         if df_delta is not None and len(df_delta.columns) > 1:
-            df_delta.to_excel(writer, sheet_name="Delta_from_Baseline", index=False)
-    print(f"Firing rates (raw/delta) exported to {xlsx_path}")
+            df_delta.to_excel(
+                writer, sheet_name="Delta_from_Baseline", index=False)
+        if baseline_start is not None and baseline_end is not None:
+            baseline_stats_df.to_excel(
+                writer, sheet_name=sheet_name, index=False
+            )
+    print(
+        f"Firing rates (raw/delta) and baseline statistics exported to {xlsx_path}")
 
     # Export firing rate plots
     images_dir = os.path.join(export_dir, "firing_rate_images")
@@ -487,7 +517,6 @@ def export_data(
     print(f"Interactive firing rate plots exported to {images_dir}")
 
     return export_dir
-
 
 def export_firing_rate_html(
     firing_rate_df: pd.DataFrame,
@@ -996,11 +1025,11 @@ def calculate_hazard_function(
 def compute_hazard_values(isi_df: pd.DataFrame, bin_starts: np.ndarray) -> pd.DataFrame:
     """
     Compute hazard values for each channel.
-    
+
     Parameters:
         isi_df (pd.DataFrame): DataFrame containing ISI histogram data.
         bin_starts (np.ndarray): Left edges of ISI bins.
-        
+
     Returns:
         pd.DataFrame: DataFrame containing hazard values for each channel.
     """
@@ -1031,14 +1060,14 @@ def compute_hazard_summary(
     late_time_end: float,
 ) -> pd.DataFrame:
     """Compute hazard summary metrics for each channel.
-    
+
     Parameters:
         hazard_df (pd.DataFrame): DataFrame containing hazard values for each channel.
         bin_starts (np.ndarray): Left edges of ISI bins.
         early_time (float): Upper threshold (in seconds) for the "early" hazard region.
         late_time_start (float): Start of the "late" hazard region (in seconds).
         late_time_end (float): End of the "late" hazard region (in seconds).
-        
+
     Returns:
         pd.DataFrame: DataFrame containing summary metrics for each channel.
     """
@@ -1211,6 +1240,10 @@ def get_user_parameters(
     return drug_time, start_time, end_time, bin_size, baseline_start, baseline_end
 
 
+def highlight_baseline_data(export_dir: str) -> str:
+    pass
+
+
 def main():
     """
     Orchestrates the complete data processing and analysis pipeline.
@@ -1253,7 +1286,12 @@ def main():
         start_time,
         end_time,
         drug_time,
+        baseline_start,
+        baseline_end,
     )
+
+    if baseline_start is not None:
+        formated_export_dir = highlight_baseline_data(export_dir)
 
     # Perform ISI and hazard analysis
     isi_df, baseline_isi_df = calculate_isi_histogram(
