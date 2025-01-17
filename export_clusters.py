@@ -119,8 +119,8 @@ def start_and_end_time(max_time: float) -> tuple[float, float]:
     )
     end_time = parse_input(
         (
-            f"Enter the end time of the plot (seconds), or press Enter to use "
-            f"{max_time:.2f}: "
+            f"""Enter the end time of the plot (seconds), or press Enter to use
+            {max_time:.2f}: """
         ),
         max_time,
     )
@@ -146,21 +146,21 @@ def prompt_for_baseline(
 
     try:
         baseline_start = float(
-            input(f"Enter baseline start time (>= {min_time:.2f}s): ")
+            input(f"""Enter baseline start time (>= {min_time:.2f}s): """)
         )
-        baseline_end = float(input(f"Enter baseline end time (<= {max_time:.2f}s): "))
+        baseline_end = float(input(f"""Enter baseline end time (<= {max_time:.2f}s): """))
 
         # Ensure the baseline start time is greater than or equal to min_time
         if baseline_start < min_time:
             print(
-                f"Baseline start time must be >= {min_time:.2f}s. "
-                "Using the minimum time."
+                f"""Baseline start time must be >= {min_time:.2f}s.
+                Using the minimum time."""
             )
             baseline_start = min_time
         if baseline_end > max_time:
             print(
-                f"Baseline end time must be <= {max_time:.2f}s. "
-                "Using the maximum time."
+                f"""Baseline end time must be <= {max_time:.2f}s.
+                Using the maximum time."""
             )
             baseline_end = max_time
         return baseline_start, baseline_end
@@ -192,12 +192,12 @@ def channels_or_labels_to_export() -> tuple[list[int], list[str]]:
 
     # Provide clear feedback to the user
     if channels:
-        print(f"Selected channels: {channels}")
+        print(f"""Selected channels: {channels}""")
     else:
         print("No numeric channels were selected.")
 
     if labels:
-        print(f"Selected labels: {labels}")
+        print(f"""Selected labels: {labels}""")
     else:
         print("No group labels were selected.")
 
@@ -403,7 +403,7 @@ def export_spike_times(data_export: dict[int, np.ndarray], export_dir: str) -> N
     max_length = max(len(arr) for arr in data_export.values())
     df_spikes = pd.DataFrame(
         {
-            f"Cluster_{cid}": np.pad(
+            f"""Cluster_{cid}""": np.pad(
                 arr, (0, max_length - len(arr)), mode="constant", constant_values=np.nan
             )
             for cid, arr in data_export.items()
@@ -411,17 +411,17 @@ def export_spike_times(data_export: dict[int, np.ndarray], export_dir: str) -> N
     )
     csv_path = os.path.join(export_dir, "spike_times_by_cluster_time_ms.csv")
     df_spikes.to_csv(csv_path, index=False)
-    print(f"Spike times exported to {csv_path}")
+    print(f"""Spike times exported to {csv_path}""")
 
     # Create and export text files
     txt_export_dir = os.path.join(export_dir, "txt_files_for_clampfit_import")
     os.makedirs(txt_export_dir, exist_ok=True)
     for cid, arr in data_export.items():
         out_file = os.path.join(
-            txt_export_dir, f"spike_times_Cluster_{cid}_time_ms.txt"
+            txt_export_dir, f"""spike_times_Cluster_{cid}_time_ms.txt"""
         )
         np.savetxt(out_file, arr, fmt="%.4f")
-    print(f"Text files saved to {txt_export_dir}")
+    print(f"""Text files saved to {txt_export_dir}""")
 
 
 def export_data(
@@ -436,13 +436,39 @@ def export_data(
     baseline_end: float | None,
 ) -> str:
     """
-    Orchestrates the export of analyzed spike data, firing rates, and interactive plots.
+    Exports analyzed spike data, firing rates, and interactive plots to an output directory.
 
-    Adds a baseline statistics sheet to the Excel file, summarizing mean and standard
-    deviation of firing rates for each cluster during the baseline period.
+    This function creates an export directory and performs the following tasks:
+        1. Filters out clusters with no spike data.
+        2. Exports spike times for each cluster to text files.
+        3. Calculates raw and delta firing rates for each cluster.
+        4. Saves firing rates as Excel sheets:
+            - "Firing_Rates_Raw": Raw firing rates for each cluster and time bin.
+            - "Delta_from_Baseline" (optional): Delta firing rates relative to the baseline.
+            - "Baseline_Stats" (optional): Mean and standard deviation of firing rates for each cluster during the baseline period.
+        5. Exports interactive firing rate plots as HTML files.
+
+    Parameters:
+        data_export (dict[int, np.ndarray]): A dictionary where keys are cluster IDs and
+                                             values are arrays of spike times (in milliseconds).
+        baseline_fr_dict (dict[int, float | None]): A dictionary mapping cluster IDs to their
+                                                    baseline firing rates. None if unavailable.
+        folder_path (str): Path to the folder containing the original data files.
+        bin_size (float): Size of time bins (in seconds) for firing rate calculations.
+        start_time (float): Start time for spike time analysis (in seconds).
+        end_time (float): End time for spike time analysis (in seconds).
+        drug_time (float | None): Time of drug application (in seconds), if applicable.
+        baseline_start (float | None): Start time of the baseline period (in seconds).
+        baseline_end (float | None): End time of the baseline period (in seconds).
+
+    Returns:
+        str: The path to the export directory where all files are saved.
+
+    Raises:
+        ValueError: If no spikes are available for export after filtering.
     """
     # Create export directory
-    analysis_folder_name = f"{os.path.basename(folder_path)}_analysed"
+    analysis_folder_name = f"""{os.path.basename(folder_path)}_analysed"""
     export_dir = create_export_dir(folder_path, analysis_folder_name)
 
     # Filter out clusters with zero spikes
@@ -477,7 +503,7 @@ def export_data(
             # Append statistics
             baseline_stats.append(
                 {
-                    "Cluster": f"Cluster_{channel}",
+                    "Cluster": f"""Cluster_{channel}""",
                     "Mean Firing Rate": np.mean(firing_rates),
                     "Standard Deviation": np.std(firing_rates),
                 }
@@ -494,8 +520,8 @@ def export_data(
 
     # Export firing rates and baseline statistics to Excel
     xlsx_path = os.path.join(export_dir, "firing_rates_by_cluster.xlsx")
-    baseline_start_fmt = f"{baseline_start:.2f}".rstrip("0").rstrip(".")
-    baseline_end_fmt = f"{baseline_end:.2f}".rstrip("0").rstrip(".")
+    baseline_start_fmt = f"""{baseline_start:.2f}""".rstrip("0").rstrip(".")
+    baseline_end_fmt = f"""{baseline_end:.2f}""".rstrip("0").rstrip(".")
     sheet_name = f"""Baseline_Stats ({baseline_start_fmt}s - {baseline_end_fmt}s)"""
 
     with ExcelWriter(xlsx_path) as writer:
@@ -508,13 +534,13 @@ def export_data(
                 writer, sheet_name=sheet_name, index=False
             )
     print(
-        f"Firing rates (raw/delta) and baseline statistics exported to {xlsx_path}")
+        f"""Firing rates (raw/delta) and baseline statistics exported to {xlsx_path}""")
 
     # Export firing rate plots
     images_dir = os.path.join(export_dir, "firing_rate_images")
     os.makedirs(images_dir, exist_ok=True)
     export_firing_rate_html(df_raw, images_dir, bin_size, drug_time)
-    print(f"Interactive firing rate plots exported to {images_dir}")
+    print(f"""Interactive firing rate plots exported to {images_dir}""")
 
     return export_dir
 
@@ -552,7 +578,7 @@ def export_firing_rate_html(
             go.Bar(
                 x=bin_times,
                 y=firing_rate_df[channel],
-                name=f"Cluster {channel}",
+                name=f"""Cluster {channel}""",
                 marker_color="black",
             )
         )
@@ -581,8 +607,8 @@ def export_firing_rate_html(
         # Customize layout
         fig.update_layout(
             title=(
-                f"Firing Rate Histogram for Cluster {channel} "
-                f"(Bin Size: {bin_size}s)"
+                f"""Firing Rate Histogram for Cluster {channel} """
+                f"""(Bin Size: {bin_size}s)"""
             ),
             xaxis_title="Time (s)",
             yaxis_title="Firing Rate (Hz)",
@@ -778,14 +804,14 @@ def calculate_firing_rate(
 
         # Calculate raw firing rates
         counts, _ = np.histogram(spike_times_sec, bins=bins)
-        raw_data[f"Cluster_{channel}"] = counts / bin_size
+        raw_data[f"""Cluster_{channel}"""] = counts / bin_size
 
         # Calculate delta firing rates if baseline is provided
         if delta_data is not None:  # Ensure delta_data is a dictionary
             baseline_fr = baseline_fr_dict.get(channel)
             if baseline_fr is not None:
-                delta_data[f"Cluster_{channel}"] = (
-                    raw_data[f"Cluster_{channel}"] - baseline_fr
+                delta_data[f"""Cluster_{channel}"""] = (
+                    raw_data[f"""Cluster_{channel}"""] - baseline_fr
                 )
 
     return raw_data, delta_data
@@ -897,7 +923,7 @@ def calculate_isi_histogram(
 
     for key, value in isi_data.items():
         if key != "Bin_Starts":
-            formatted_columns[f"Cluster_{key}"] = value
+            formatted_columns[f"""Cluster_{key}"""] = value
 
     baseline_isi_df = None
     if baseline_data:
@@ -905,7 +931,7 @@ def calculate_isi_histogram(
         baseline_columns = {"Bin_Starts": baseline_data["Bin_Starts"]}
         for key, value in baseline_data.items():
             if key != "Bin_Starts":
-                baseline_columns[f"Cluster_{key}_Baseline"] = value
+                baseline_columns[f"""Cluster_{key}_Baseline"""] = value
         baseline_isi_df = pd.DataFrame(baseline_columns)
 
     return pd.DataFrame(formatted_columns), baseline_isi_df
@@ -960,7 +986,7 @@ def export_hazard_excel(
                 writer, sheet_name="Baseline_Hazard_Summary", index=False
             )
 
-    print(f"ISI and hazard data exported to {excel_path}")
+    print(f"""ISI and hazard data exported to {excel_path}""")
 
 
 def calculate_hazard_function(
@@ -1167,7 +1193,7 @@ def process_filtered_data(
     max_time = (
         np.max(filtered_spike_times) / 30000 if len(filtered_spike_times) > 0 else 0
     )
-    print(f"Recording length: {max_time:.2f}s")
+    print(f"""Recording length: {max_time:.2f}s""")
 
     return filtered_spike_times, filtered_spike_clusters, filtered_labels, max_time
 
@@ -1236,7 +1262,7 @@ def get_user_parameters(
         f"""Analyzing data from {start_time}s to {end_time}s with bin size {bin_size}s"""
     )
     if drug_time:
-        print(f"Drug application time: {drug_time:.2f}s")
+        print(f"""Drug application time: {drug_time:.2f}s""")
     return drug_time, start_time, end_time, bin_size, baseline_start, baseline_end
 
 
