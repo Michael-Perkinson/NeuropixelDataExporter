@@ -44,7 +44,7 @@ See the detailed update history in the [CHANGELOG.md](CHANGELOG.md).
    - Create an environment named `export_env` using Conda:
 
      ```bash
-     conda create -n export_env python=3.8
+     conda create -n export_env
      conda activate export_env
      ```
 
