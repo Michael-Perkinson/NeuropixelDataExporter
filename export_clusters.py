@@ -119,8 +119,7 @@ def start_and_end_time(max_time: float) -> tuple[float, float]:
     )
     end_time = parse_input(
         (
-            f"""Enter the end time of the plot (seconds), or press Enter to use
-            {max_time:.2f}: """
+            f"""Enter the end time of the plot (seconds), or press Enter to use {max_time:.2f}: """
         ),
         max_time,
     )
@@ -517,12 +516,14 @@ def export_data(
             baseline_stats_df["Cluster"].tolist())
         baseline_stats_df = baseline_stats_df.set_index(
             "Cluster").loc[sorted_clusters].reset_index()
+        
+        baseline_start_fmt = f"""{baseline_start:.2f}""".rstrip(
+            "0").rstrip(".")
+        baseline_end_fmt = f"""{baseline_end:.2f}""".rstrip("0").rstrip(".")
+        sheet_name = f"""Baseline_Stats ({baseline_start_fmt}s - {baseline_end_fmt}s)"""
 
     # Export firing rates and baseline statistics to Excel
     xlsx_path = os.path.join(export_dir, "firing_rates_by_cluster.xlsx")
-    baseline_start_fmt = f"""{baseline_start:.2f}""".rstrip("0").rstrip(".")
-    baseline_end_fmt = f"""{baseline_end:.2f}""".rstrip("0").rstrip(".")
-    sheet_name = f"""Baseline_Stats ({baseline_start_fmt}s - {baseline_end_fmt}s)"""
 
     with ExcelWriter(xlsx_path) as writer:
         df_raw.to_excel(writer, sheet_name="Firing_Rates_Raw", index=False)
