@@ -994,7 +994,16 @@ def calculate_hazard_function(
 
 
 def compute_hazard_values(isi_df: pd.DataFrame, bin_starts: np.ndarray) -> pd.DataFrame:
-    """Compute hazard values for each channel."""
+    """
+    Compute hazard values for each channel.
+    
+    Parameters:
+        isi_df (pd.DataFrame): DataFrame containing ISI histogram data.
+        bin_starts (np.ndarray): Left edges of ISI bins.
+        
+    Returns:
+        pd.DataFrame: DataFrame containing hazard values for each channel.
+    """
     hazard_data = {"Bin_Starts": bin_starts}
 
     for channel in isi_df.columns[1:]:
@@ -1021,7 +1030,18 @@ def compute_hazard_summary(
     late_time_start: float,
     late_time_end: float,
 ) -> pd.DataFrame:
-    """Compute hazard summary metrics for each channel."""
+    """Compute hazard summary metrics for each channel.
+    
+    Parameters:
+        hazard_df (pd.DataFrame): DataFrame containing hazard values for each channel.
+        bin_starts (np.ndarray): Left edges of ISI bins.
+        early_time (float): Upper threshold (in seconds) for the "early" hazard region.
+        late_time_start (float): Start of the "late" hazard region (in seconds).
+        late_time_end (float): End of the "late" hazard region (in seconds).
+        
+    Returns:
+        pd.DataFrame: DataFrame containing summary metrics for each channel.
+    """
     summary_data = []
 
     for channel in hazard_df.columns[1:]:
