@@ -1191,9 +1191,8 @@ def process_filtered_data(
         channels_to_include=user_filters["channels_to_include"],
     )
 
-    max_time = (
-        np.max(filtered_spike_times) / 30000 if len(filtered_spike_times) > 0 else 0
-    )
+    max_time = spike_times[-1] / 30000 if len(spike_times) > 0 else 0
+
     print(f"""Recording length: {max_time:.2f}s""")
 
     return filtered_spike_times, filtered_spike_clusters, filtered_labels, max_time
