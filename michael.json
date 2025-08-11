@@ -1,0 +1,10 @@
+{
+    "cck_time": "",
+    "optional_outputs": {
+        "export_txt": true,
+        "export_all_graphs": true,
+        "baseline_hazard": true,
+        "binned_hazard": true
+    },
+    "theme": "dark"
+}

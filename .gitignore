@@ -50,6 +50,9 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+.ruff_cache
+.vscode
+dev-requirements.txt
 
 # Translations
 *.mo
@@ -165,3 +168,6 @@ cython_debug/
 #.idea/
 
 
+pytest.ini
+requirements2.txt
+.vscode/settings.json

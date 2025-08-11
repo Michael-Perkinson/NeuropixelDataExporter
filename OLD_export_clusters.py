@@ -71,10 +71,12 @@ def choose_and_validate_folder() -> dict[str, str]:
 
         # Find required files in the selected folder
         file_paths = find_specific_files_in_folder(folder_path, REQUIRED_FILES)
-        missing_files = [file for file in REQUIRED_FILES if file not in file_paths]
+        missing_files = [
+            file for file in REQUIRED_FILES if file not in file_paths]
 
         if missing_files:
-            print(f"""Error: Missing required files: {', '.join(missing_files)}""")
+            print(
+                f"""Error: Missing required files: {', '.join(missing_files)}""")
             print("Please select another folder or cancel to exit.")
         else:
             return file_paths
@@ -287,7 +289,8 @@ def filter_by_labels(
     Returns:
         np.ndarray: A boolean mask for the selected labels.
     """
-    valid_cluster_ids = np.where(np.isin(group_labels_array, labels_to_include))[0]
+    valid_cluster_ids = np.where(
+        np.isin(group_labels_array, labels_to_include))[0]
     print(
         f"""Filtered cluster IDs for labels
         {labels_to_include}: {valid_cluster_ids}"""
@@ -339,7 +342,8 @@ def filter_data(
 
     # Apply label filtering
     if labels_to_include:
-        mask |= filter_by_labels(spike_clusters, group_labels_array, labels_to_include)
+        mask |= filter_by_labels(
+            spike_clusters, group_labels_array, labels_to_include)
 
     # Apply channel filtering
     if channels_to_include:
@@ -483,7 +487,8 @@ def export_data(
     export_dir = create_export_dir(folder_path, analysis_folder_name)
 
     # Filter out clusters with zero spikes
-    data_export = {cid: arr for cid, arr in data_export.items() if len(arr) > 0}
+    data_export = {cid: arr for cid,
+                   arr in data_export.items() if len(arr) > 0}
     if not data_export:
         print("No spikes to export. Exiting.")
         return export_dir
@@ -500,7 +505,8 @@ def export_data(
 
     # Calculate baseline statistics
     if baseline_start is not None and baseline_end is not None:
-        baseline_bins = np.arange(baseline_start, baseline_end + bin_size, bin_size)
+        baseline_bins = np.arange(
+            baseline_start, baseline_end + bin_size, bin_size)
         baseline_stats = []
 
         for channel, spikes in data_export.items():
@@ -522,12 +528,15 @@ def export_data(
         baseline_stats_df = pd.DataFrame(baseline_stats)
         print(baseline_stats_df.columns)
         # Sort cluster names using your custom function
-        sorted_clusters = sort_cluster_columns(baseline_stats_df["Cluster"].tolist())
+        sorted_clusters = sort_cluster_columns(
+            baseline_stats_df["Cluster"].tolist())
         baseline_stats_df = (
-            baseline_stats_df.set_index("Cluster").loc[sorted_clusters].reset_index()
+            baseline_stats_df.set_index(
+                "Cluster").loc[sorted_clusters].reset_index()
         )
 
-        baseline_start_fmt = f"""{baseline_start:.2f}""".rstrip("0").rstrip(".")
+        baseline_start_fmt = f"""{baseline_start:.2f}""".rstrip(
+            "0").rstrip(".")
         baseline_end_fmt = f"""{baseline_end:.2f}""".rstrip("0").rstrip(".")
         sheet_name = f"""Baseline_Stats ({baseline_start_fmt}s - {baseline_end_fmt}s)"""
 
@@ -537,9 +546,11 @@ def export_data(
     with ExcelWriter(xlsx_path) as writer:
         df_raw.to_excel(writer, sheet_name="Firing_Rates_Raw", index=False)
         if df_delta is not None and len(df_delta.columns) > 1:
-            df_delta.to_excel(writer, sheet_name="Delta_from_Baseline", index=False)
+            df_delta.to_excel(
+                writer, sheet_name="Delta_from_Baseline", index=False)
         if baseline_start is not None and baseline_end is not None:
-            baseline_stats_df.to_excel(writer, sheet_name=sheet_name, index=False)
+            baseline_stats_df.to_excel(
+                writer, sheet_name=sheet_name, index=False)
     print(
         f"""Firing rates (raw/delta) and baseline statistics exported to {xlsx_path}"""
     )
@@ -755,7 +766,8 @@ def compute_baseline_firing_rate(
     Returns:
         float: Baseline firing rate (spikes/s).
     """
-    baseline_spikes = spikes[(spikes >= baseline_start) & (spikes <= baseline_end)]
+    baseline_spikes = spikes[(spikes >= baseline_start)
+                             & (spikes <= baseline_end)]
     baseline_duration = baseline_end - baseline_start
     return len(baseline_spikes) / baseline_duration if baseline_duration > 0 else 0.0
 
@@ -979,7 +991,8 @@ def export_hazard_excel(
     with ExcelWriter(excel_path, engine="xlsxwriter") as writer:
         isi_df.to_excel(writer, sheet_name="ISI_Histogram", index=False)
         hazard_df.to_excel(writer, sheet_name="Hazard_Function", index=False)
-        hazard_summary_df.to_excel(writer, sheet_name="Hazard_Summary", index=False)
+        hazard_summary_df.to_excel(
+            writer, sheet_name="Hazard_Summary", index=False)
 
         # Write baseline data if available
         if baseline_isi_df is not None:
@@ -1113,11 +1126,14 @@ def compute_hazard_summary(
 
         # Early hazard metrics
         early_mask = bin_starts <= early_time
-        peak_early_hazard = hazard_values[early_mask].max() if early_mask.any() else 0
+        peak_early_hazard = hazard_values[early_mask].max(
+        ) if early_mask.any() else 0
 
         # Late hazard metrics
-        late_mask = (bin_starts >= late_time_start) & (bin_starts <= late_time_end)
-        mean_late_hazard = hazard_values[late_mask].mean() if late_mask.any() else 0
+        late_mask = (bin_starts >= late_time_start) & (
+            bin_starts <= late_time_end)
+        mean_late_hazard = hazard_values[late_mask].mean(
+        ) if late_mask.any() else 0
 
         # Hazard ratio
         hazard_ratio = (
@@ -1159,7 +1175,8 @@ def get_user_input(
     channels_to_include, labels_to_include = channels_or_labels_to_export()
 
     # Load raw spike data
-    spike_times, spike_clusters = load_spike_data(spike_times_path, spike_clusters_path)
+    spike_times, spike_clusters = load_spike_data(
+        spike_times_path, spike_clusters_path)
     group_labels_array = create_label_lookup(group_labels_path)
 
     return (
