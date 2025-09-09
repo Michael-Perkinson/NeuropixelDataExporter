@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from file_manager import validate_folder, REQUIRED_FILES
+from file_manager import validate_ks_folder, KS_REQUIRED, KS_LABEL_FILES
 from spike_filter import prepare_filtered_data
 from firing_rate import process_cluster_data
 from isi_hazard import calculate_isi_histogram, calculate_hazard_function
@@ -37,7 +37,8 @@ def run_analysis(folder_path: Path):
 
     # Validate required files
     try:
-        file_paths = validate_folder(folder_path, REQUIRED_FILES)
+        file_paths = validate_ks_folder(
+            folder_path, KS_REQUIRED, KS_LABEL_FILES)
     except FileNotFoundError as e:
         print(f"Error: {e}")
         return

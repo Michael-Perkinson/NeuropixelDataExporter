@@ -1,8 +1,19 @@
+from typing import Sequence
 from pathlib import Path
 import numpy as np
 import pandas as pd
 
-REQUIRED_FILES = ["spike_times.npy", "spike_clusters.npy", "cluster_group.tsv"]
+# Always required from Kilosort output
+KS_REQUIRED = [
+    "spike_times.npy",
+    "spike_clusters.npy",
+]
+
+# One-of required: clustering annotation
+KS_LABEL_FILES = [
+    "cluster_KSLabel.tsv",   # Kilosort4
+    "cluster_group.tsv",     # Phy / Kilosort3
+]
 
 
 def find_specific_files_in_folder(
@@ -23,25 +34,49 @@ def find_specific_files_in_folder(
     }
 
 
-def validate_folder(folder_path: Path, required_files: list[str]) -> dict[str, str]:
+def validate_ks_folder(
+    folder_path: Path,
+    always_required: Sequence[str],
+    one_of_required: Sequence[str],
+) -> dict[str, str]:
     """
-    Ensure that all required files are present in a specified folder.
+    Validate Kilosort output folder.
 
-    Args
+    Args:
         folder_path: Path to the folder being validated.
-        required_files: List of filenames that must be present.
+        always_required: Filenames that must all be present.
+        one_of_required: A list of filenames where at least one must exist.
 
-    Returns
-        A dictionary mapping required filenames to their full paths.
+    Returns:
+        A dict mapping filenames (present) to their resolved full paths.
 
-    Raises
-        FileNotFoundError if any required file is missing.
+    Raises:
+        FileNotFoundError if any always-required file is missing
+        or if none of the one-of-required files are found.
     """
-    file_paths = find_specific_files_in_folder(folder_path, required_files)
-    missing = [f for f in required_files if f not in file_paths]
-    if missing:
-        raise FileNotFoundError(f"Missing required files: {', '.join(missing)}")
-    return file_paths
+    # Check always-required files
+    resolved: dict[str, str] = {}
+    for fname in always_required:
+        fpath = folder_path / fname
+        if not fpath.exists():
+            raise FileNotFoundError(f"Missing required file: {fname}")
+        resolved[fname] = str(fpath)
+
+    # Check one-of-required files
+    found = None
+    for fname in one_of_required:
+        fpath = folder_path / fname
+        if fpath.exists():
+            resolved[fname] = str(fpath)
+            found = fname
+            break
+    if found is None:
+        raise FileNotFoundError(
+            f"Missing label file, need one of: {', '.join(one_of_required)}"
+        )
+
+    return resolved
+
 
 
 def load_spike_data(

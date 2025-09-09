@@ -3,12 +3,12 @@ import pandas as pd
 from pandas import ExcelWriter
 import numpy as np
 
-from core.firing_rate import (
+from src.core.firing_rate import (
     calculate_firing_rate,
     create_firing_rate_dataframes,
     create_baselined_df,
 )
-from core.file_manager import make_output_folders
+from src.core.file_manager import make_output_folders
 
 
 def create_export_dir(folder_path: Path, analysis_folder_name: str) -> Path:

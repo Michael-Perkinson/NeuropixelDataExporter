@@ -7,7 +7,7 @@ import pandas as pd
 from pandas import ExcelWriter
 import plotly.graph_objects as go
 
-REQUIRED_FILES = ["spike_times.npy", "spike_clusters.npy", "cluster_group.tsv"]
+REQUIRED_FILES = ["spike_times.npy", "spike_clusters.npy", "cluster_KSLabel.tsv", "cluster_group.tsv"] #TODO add both KSLabel and group to this?
 
 
 def file_chooser() -> str | None:
@@ -1169,7 +1169,7 @@ def get_user_input(
     """
     spike_times_path = file_paths["spike_times.npy"]
     spike_clusters_path = file_paths["spike_clusters.npy"]
-    group_labels_path = file_paths["cluster_group.tsv"]
+    group_labels_path = file_paths["cluster_KSLabel.tsv"]
 
     # Prompt user for channels/labels to include
     channels_to_include, labels_to_include = channels_or_labels_to_export()

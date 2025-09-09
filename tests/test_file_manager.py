@@ -3,8 +3,8 @@ import pandas as pd
 import pytest
 from pathlib import Path
 
-from core.file_manager import (
-    validate_folder,
+from src.core.file_manager import (
+    validate_ks_folder,
     find_specific_files_in_folder,
     load_spike_data,
     create_label_lookup,
@@ -13,8 +13,6 @@ from core.file_manager import (
 )
 
 # --- Test for find_specific_files_in_folder --- #
-
-
 def test_find_specific_files_in_folder(tmp_path):
     # Create dummy files in the temporary directory
     required_files = ["spike_times.npy",
@@ -98,8 +96,8 @@ def test_create_label_lookup_random_str(tmp_path):
         create_label_lookup(tsv_file)
 
 
-# --- Tests for choose_and_validate_folder --- #
-def test_choose_and_validate_folder_success(monkeypatch, tmp_path):
+# --- Tests for choose_and_validate_ks_folder --- #
+def test_choose_and_validate_ks_folder_success(monkeypatch, tmp_path):
     # Create dummy required files in the temporary directory.
     required_files = ["spike_times.npy",
                       "spike_clusters.npy", "cluster_group.tsv"]
@@ -110,20 +108,20 @@ def test_choose_and_validate_folder_success(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "pyside_gui.file_chooser.file_chooser", lambda: tmp_path)
 
-    # Call validate_folder and check if it returns the correct file paths.
-    file_paths = validate_folder(tmp_path, required_files)
+    # Call validate_ks_folder and check if it returns the correct file paths.
+    file_paths = validate_ks_folder(tmp_path, required_files)
     assert set(file_paths.keys()) == set(required_files)
     for file in required_files:
         assert (tmp_path / file).exists()
 
 
-def test_choose_and_validate_folder_cancel(monkeypatch):
+def test_choose_and_validate_ks_folder_cancel(monkeypatch):
     # Monkeypatch file_chooser to simulate cancellation (return None)
     monkeypatch.setattr("pyside_gui.file_chooser.file_chooser", lambda: None)
 
-    # When no folder is selected, choose_and_validate_folder should raise a FileNotFoundError.
+    # When no folder is selected, choose_and_validate_ks_folder should raise a FileNotFoundError.
     with pytest.raises(FileNotFoundError):
-        validate_folder(Path("invalid_path"), ["file1", "file2"])
+        validate_ks_folder(Path("invalid_path"), ["file1", "file2"])
 
 
 def test_make_specific_folder(tmp_path):

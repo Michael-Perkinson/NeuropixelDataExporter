@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
-from core.file_manager import load_spike_data, create_label_lookup
-from core.terminal_prompts import channels_or_labels_to_export
+from src.core.file_manager import load_spike_data, create_label_lookup
+from src.core.terminal_prompts import channels_or_labels_to_export
 
 
 def filter_by_labels(

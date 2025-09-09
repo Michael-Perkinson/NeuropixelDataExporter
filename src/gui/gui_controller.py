@@ -4,16 +4,16 @@ from typing import Optional
 from pathlib import Path
 from PySide6.QtWidgets import QTextEdit, QFileDialog, QMessageBox
 
-from pyside_gui.view import MainWindow
-from pyside_gui.gui_themes import _dark_theme, _light_theme
+from src.gui.view import MainWindow
+from src.gui.gui_themes import _dark_theme, _light_theme
 
-from core.file_manager import validate_folder, create_label_lookup, REQUIRED_FILES
-from core.spike_filter import prepare_filtered_data
-from core.firing_rate import process_cluster_data
-from core.isi_hazard import calculate_isi_histogram, calculate_hazard_function
-from core.results_writer import export_data, export_hazard_excel
-from core.interactive_plot import export_firing_rate_html
-from core.input_parser import parse_channels_or_labels, validate_and_parse_drug_event
+from src.core.file_manager import validate_ks_folder, create_label_lookup, KS_REQUIRED, KS_LABEL_FILES
+from src.core.spike_filter import prepare_filtered_data
+from src.core.firing_rate import process_cluster_data
+from src.core.isi_hazard import calculate_isi_histogram, calculate_hazard_function
+from src.core.results_writer import export_data, export_hazard_excel
+from src.core.interactive_plot import export_firing_rate_html
+from src.core.input_parser import parse_channels_or_labels, validate_and_parse_drug_event
 
 # Determine runtime path (support both script and PyInstaller .exe)
 if getattr(sys, 'frozen', False):
@@ -27,11 +27,11 @@ TEMP_SETTINGS_PATH = BASE_DIR / ".neuropixel_gui_last_session.json"
 class GUIController:
     def __init__(self):
         pass
-            
+
     def set_view(self, main_window):
         self.view = main_window
 
-    def export_user_settings(self, parent):       
+    def export_user_settings(self, parent):
         file_path, _ = QFileDialog.getSaveFileName(
             parent, "Export Settings", "", "JSON Files (*.json)")
         if not file_path:
@@ -193,7 +193,8 @@ class GUIController:
 
         # Validate required files
         try:
-            file_paths = validate_folder(folder_path, REQUIRED_FILES)
+            file_paths = validate_ks_folder(
+                folder_path, KS_REQUIRED, KS_LABEL_FILES)
         except FileNotFoundError as e:
             log.append(f"Missing required file: {e}")
             return

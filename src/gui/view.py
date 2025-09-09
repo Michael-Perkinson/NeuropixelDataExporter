@@ -1,8 +1,8 @@
 # main_window.py
 from __future__ import annotations
-from core.file_manager import find_specific_files_in_folder, REQUIRED_FILES
-from pyside_gui.gui_themes import _toggle_theme, make_help_icon
-from pyside_gui.file_chooser import file_chooser
+from src.core.file_manager import find_specific_files_in_folder, KS_REQUIRED, KS_LABEL_FILES
+from src.gui.gui_themes import _toggle_theme, make_help_icon
+from src.gui.file_chooser import file_chooser
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QPushButton, QLineEdit, QLabel, QTextEdit,
     QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QCheckBox,
@@ -16,7 +16,7 @@ import logging
 
 class MainWindow(QMainWindow):
     """Neuropixel Data Exporter GUI (fixed log, no binding warning)."""
-    MIN_W, MIN_H = 960, 540
+    MIN_W, MIN_H = 1080, 720
 
     def __init__(self, controller):
         super().__init__()
@@ -307,7 +307,7 @@ class MainWindow(QMainWindow):
         if not path:
             return
 
-        found_files = find_specific_files_in_folder(path, REQUIRED_FILES)
+        found_files = find_specific_files_in_folder(path, KS_REQUIRED, KS_LABEL_FILES)
         if found_files:
             self.log_output.append(
                 f"Found {len(found_files)} required file(s):")
