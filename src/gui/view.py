@@ -1,48 +1,74 @@
-# main_window.py
 from __future__ import annotations
-from src.core.file_manager import find_specific_files_in_folder, KS_REQUIRED, KS_LABEL_FILES
-from src.gui.gui_themes import _toggle_theme, make_help_icon
-from src.gui.file_chooser import file_chooser
-from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QPushButton, QLineEdit, QLabel, QTextEdit,
-    QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QCheckBox,
-    QTableWidget, QTableWidgetItem, QGridLayout, QHeaderView, QComboBox,
-    QTabWidget, QSizePolicy,
-)
-from PySide6.QtGui import QAction, QFont, QStandardItemModel, QStandardItem
+
+import math
+from typing import TypedDict, Any
+
 from PySide6.QtCore import Qt
-import logging
+from PySide6.QtGui import QAction, QFont
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QPushButton,
+    QSizePolicy,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
+from src.core.file_manager import KS_LABEL_FILES, KS_REQUIRED, find_specific_files_in_folder
+from src.gui.file_chooser import file_chooser
+from src.gui.gui_themes import _toggle_theme, make_help_icon
 
 
-class MainWindow(QMainWindow):
-    """Neuropixel Data Exporter GUI (fixed log, no binding warning)."""
+class DrugEvent(TypedDict):
+    name: str
+    start: float
+    end: float | None
+    pre_time: float | None
+    post_time: float | None
+
+
+class MainWindow(QMainWindow):  # type: ignore[misc]
     MIN_W, MIN_H = 1080, 720
 
-    def __init__(self, controller):
+    def __init__(self, controller: Any) -> None:
         super().__init__()
+        self.dark_mode: bool = False
         self.controller = controller
         self.setWindowTitle("Neuropixel Data Exporter")
         self.setMinimumSize(self.MIN_W, self.MIN_H)
+        self.setMaximumSize(self.MIN_W, self.MIN_H)
 
         self.controller.set_view(self)
         self._build_ui()
         self.controller.load_temp_settings()
 
+    # ── UI construction ──────────────────────────────────────────────────────
+
     def _build_ui(self) -> None:
         self._create_menu_bar()
 
-        inputs_widget = QWidget()
-        inputs_widget.setLayout(self._create_inputs_layout())
-
-        log_group_box = self._create_log_group_box()
-
         root_layout = QVBoxLayout()
-        root_layout.addWidget(inputs_widget)
-        root_layout.addWidget(log_group_box)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(8)
 
-        root_container = QWidget()
-        root_container.setLayout(root_layout)
-        self.setCentralWidget(root_container)
+        root_layout.addWidget(self._create_folder_group())
+        root_layout.addLayout(self._create_main_columns(), stretch=1)
+        root_layout.addWidget(self._create_log_group())
+
+        container = QWidget()
+        container.setLayout(root_layout)
+        self.setCentralWidget(container)
 
     def _create_menu_bar(self) -> None:
         settings_menu = self.menuBar().addMenu("Settings")
@@ -57,249 +83,384 @@ class MainWindow(QMainWindow):
             lambda: self.controller.export_user_settings(self))
         settings_menu.addAction(export_action)
 
-        toggle_theme_action = QAction("Toggle Light/Dark Mode", self)
-        toggle_theme_action.triggered.connect(lambda: _toggle_theme(self))
-        settings_menu.addAction(toggle_theme_action)
+        toggle_action = QAction("Toggle Light/Dark Mode", self)
+        toggle_action.triggered.connect(lambda: _toggle_theme(self))
+        settings_menu.addAction(toggle_action)
 
-    def _create_inputs_layout(self) -> QVBoxLayout:
-        inputs_layout = QVBoxLayout()
-        inputs_layout.setContentsMargins(10, 10, 10, 10)
-        inputs_layout.setSpacing(10)
+    def _create_folder_group(self) -> QGroupBox:
+        self.folder_input = QLineEdit(placeholderText="Select data folder…")
+        browse_btn = QPushButton("Browse")
+        browse_btn.setFixedWidth(80)
+        browse_btn.clicked.connect(self._select_folder)
 
-        # ----- Data-folder selector ----------------------------------- #
-        folder_group_box = QGroupBox("Data Folder")
-        folder_layout = QHBoxLayout()
-        browse_button = QPushButton("Browse")
-        browse_button.clicked.connect(self._select_folder)
-        browse_button.setFixedWidth(80)
-        self.folder_input = QLineEdit(placeholderText="Select data folder")
-        folder_layout.addWidget(browse_button)
-        folder_layout.addWidget(self.folder_input)
-        folder_group_box.setLayout(folder_layout)
-        folder_group_box.setMaximumHeight(60)
-        inputs_layout.addWidget(folder_group_box)
+        row = QHBoxLayout()
+        row.addWidget(browse_btn)
+        row.addWidget(self.folder_input)
 
-        columns_layout = QHBoxLayout()
-        columns_layout.setSpacing(10)
+        box = QGroupBox("Data Folder")
+        box.setMaximumHeight(60)
+        box.setLayout(row)
+        return box
 
-        # Left column
-        left_column_layout = QVBoxLayout()
-        left_column_layout.addWidget(self._create_analysis_tabs())
-        left_column_layout.addWidget(self._create_outputs_checkbox_group())
-        columns_layout.addLayout(left_column_layout, stretch=2)
+    def _create_main_columns(self) -> QHBoxLayout:
+        cols = QHBoxLayout()
+        cols.setSpacing(10)
+        cols.addLayout(self._create_left_column(), stretch=4)
+        cols.addLayout(self._create_right_column(), stretch=6)
+        return cols
 
-        # Right column
-        right_column_layout = QVBoxLayout()
-        right_column_layout.addWidget(self._create_drug_input_group())
-        right_column_layout.addWidget(self._create_drug_table_group())
-        columns_layout.addLayout(right_column_layout, stretch=6)
+    # ── Left column ──────────────────────────────────────────────────────────
 
-        inputs_layout.addLayout(columns_layout)
+    def _create_left_column(self) -> QVBoxLayout:
+        col = QVBoxLayout()
+        col.setSpacing(8)
+        col.addWidget(self._create_analysis_group())
+        col.addWidget(self._create_cell_typing_group())
+        col.addWidget(self._create_options_group())
+        col.addStretch()
+        return col
 
-        return inputs_layout
-
-    def _create_analysis_tabs(self) -> QTabWidget:
-        tabs = QTabWidget()
-
-        # ------- Analysis tab ----------------------------------------- #
+    def _create_analysis_group(self) -> QGroupBox:
         self.cluster_input = QLineEdit(placeholderText="e.g. 1, good, 5")
+        self.cluster_dropdown = QComboBox()
+        self.cluster_dropdown.addItem("Select label…")
+        self.cluster_dropdown.setFixedWidth(110)
+        self.cluster_dropdown.activated.connect(self._on_label_selected)
 
-        self.cluster_dropdown = QComboBox(placeholderText="Select Label...")
-        
-        self.cluster_dropdown.setCurrentIndex(0)
-        self.cluster_dropdown.activated.connect(self._on_cluster_selected)
-        self.cluster_dropdown.setFixedWidth(120)
-
-        analysis_form = QFormLayout(labelAlignment=Qt.AlignmentFlag.AlignLeft)
         cluster_row = QHBoxLayout()
+        cluster_row.setSpacing(4)
         cluster_row.addWidget(self.cluster_input)
         cluster_row.addWidget(self.cluster_dropdown)
-        analysis_form.addRow("Clusters / Labels:", cluster_row)
 
+        self.start_time_input = QLineEdit(placeholderText="0 s")
+        self.end_time_input = QLineEdit(placeholderText="max")
+        self.bin_size_input = QLineEdit(placeholderText="60 s")
+        self.start_time_input.setFixedWidth(70)
+        self.end_time_input.setFixedWidth(70)
+        self.bin_size_input.setFixedWidth(70)
 
-        self.start_time_input = QLineEdit(
-            placeholderText="Default = 0 s")
-        self.end_time_input = QLineEdit(
-            placeholderText="Default = max")
-        self.bin_size_input = QLineEdit(
-            placeholderText="Default = 60 s")
-        analysis_form.addRow("Start Time (s):", self.start_time_input)
-        analysis_form.addRow("End Time (s):",   self.end_time_input)
-        analysis_form.addRow("Bin Size (s):",   self.bin_size_input)
+        time_row = QHBoxLayout()
+        time_row.setSpacing(4)
+        time_row.addWidget(QLabel("Start:"))
+        time_row.addWidget(self.start_time_input)
+        time_row.addWidget(QLabel("End:"))
+        time_row.addWidget(self.end_time_input)
+        time_row.addWidget(QLabel("Bin:"))
+        time_row.addWidget(self.bin_size_input)
+        time_row.addStretch()
 
-        analysis_box = QGroupBox()
-        analysis_box.setLayout(analysis_form)
-        tabs.addTab(analysis_box, "Analysis")
+        # ── Firing rate Baseline (inline) ────────────────────────────────────
+        self.use_baseline_checkbox = QCheckBox("FR Baseline")
+        self.use_baseline_checkbox.setToolTip(
+            "Compute a mean firing rate over this window and use it\n"
+            "as a baseline for delta-from-baseline output."
+        )
+        self.baseline_start_input = QLineEdit(placeholderText="Start s")
+        self.baseline_end_input = QLineEdit(placeholderText="End s")
+        self.baseline_start_input.setFixedWidth(70)
+        self.baseline_end_input.setFixedWidth(70)
 
-        additional_form = QFormLayout(
-            labelAlignment=Qt.AlignmentFlag.AlignLeft)
-        cck_label = QLabel("CCK (IV)")
-        cck_label.setFont(QFont("", 12, QFont.Weight.Bold))
-        additional_form.addRow(cck_label)
+        baseline_row = QHBoxLayout()
+        baseline_row.setSpacing(4)
+        baseline_row.addWidget(self.use_baseline_checkbox)
+        baseline_row.addWidget(QLabel("From:"))
+        baseline_row.addWidget(self.baseline_start_input)
+        baseline_row.addWidget(QLabel("To:"))
+        baseline_row.addWidget(self.baseline_end_input)
+        baseline_row.addStretch()
 
-        self.cck_time_input = QLineEdit(
-            placeholderText="Optional")
-        additional_form.addRow("CCK Time (s):", self.cck_time_input)
+        # ── ISI / Hazard baseline window ──────────────────────────────────────
+        isi_label = QLabel("ISI Hazard Window:")
+        isi_label.setToolTip(
+            "Time window used for the 'early recording' ISI histogram\n"
+            "and hazard function — separate from the firing rate baseline.\n\n"
+            "Default is the first 10 minutes (0–600 s), which is typically\n"
+            "pre-drug and gives a stable reference hazard shape.\n\n"
+            "Only used when 'Binned ISI & Hazard' is checked."
+        )
+        isi_label.setStyleSheet("font-size: 8pt; color: #4a4a6a;")
+        self.isi_hazard_start_input = QLineEdit(placeholderText="0 s")
+        self.isi_hazard_end_input = QLineEdit(placeholderText="600 s")
+        self.isi_hazard_start_input.setFixedWidth(55)
+        self.isi_hazard_end_input.setFixedWidth(55)
+        self.isi_hazard_start_input.setToolTip(
+            "Start of the ISI/hazard reference window (seconds).\nDefault: 0"
+        )
+        self.isi_hazard_end_input.setToolTip(
+            "End of the ISI/hazard reference window (seconds).\nDefault: 600 (10 min)"
+        )
 
-        # Spacer (optional)
-        additional_form.addRow(QLabel(""))
+        isi_row = QHBoxLayout()
+        isi_row.setSpacing(4)
+        isi_row.addWidget(isi_label)
+        isi_row.addWidget(QLabel("From:"))
+        isi_row.addWidget(self.isi_hazard_start_input)
+        isi_row.addWidget(QLabel("To:"))
+        isi_row.addWidget(self.isi_hazard_end_input)
+        isi_row.addStretch()
 
-        # --- Baseline Section ---
-        baseline_label = QLabel("Baseline Settings")
-        baseline_label.setFont(QFont("", 12, QFont.Weight.Bold))
-        additional_form.addRow(baseline_label)
+        sep = QLabel()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet("background-color: #d0d0d0; margin: 2px 0;")
 
-        self.baseline_start_input = QLineEdit(
-            placeholderText="Optional")
-        self.baseline_end_input = QLineEdit(
-            placeholderText="Optional")
-        additional_form.addRow("Baseline Start (s):",
-                               self.baseline_start_input)
-        additional_form.addRow("Baseline End (s):", self.baseline_end_input)
+        layout = QVBoxLayout()
+        layout.setSpacing(6)
+        layout.addWidget(QLabel("Clusters / Labels:"))
+        layout.addLayout(cluster_row)
+        layout.addSpacing(2)
+        layout.addLayout(time_row)
+        layout.addWidget(sep)
+        layout.addLayout(baseline_row)
+        layout.addLayout(isi_row)
 
-        # Group box and tab
-        additional_box = QGroupBox()
-        additional_box.setLayout(additional_form)
-        tabs.addTab(additional_box, "CCK and Baseline")
+        box = QGroupBox("Analysis")
+        box.setLayout(layout)
+        return box
 
-        return tabs
+    def _create_cell_typing_group(self) -> QGroupBox:
+        tabs = QTabWidget()
+        tabs.addTab(self._create_cck_tab(), "CCK (IV)")
+        tabs.addTab(self._create_pe_tab(), "PE (IV)")
 
-    def _create_outputs_checkbox_group(self) -> QGroupBox:
-        self.use_baseline_checkbox = QCheckBox(
-            "Delta Firing Rate",         checked=True)
-        self.baseline_hazard_checkbox = QCheckBox(
-            "Baseline ISI and Hazard",     checked=True)
-        self.binned_hazard_checkbox = QCheckBox(
-            "Binned ISI and Hazard",       checked=True)
-        self.group_label_data_checkbox = QCheckBox(
-            "Export Mean by Label",      checked=True)
-        self.txt_export_checkbox = QCheckBox(
-            "Export TXT for Clampfit",   checked=True)
-        self.all_graphs_checkbox = QCheckBox(
-            "Export All Graphs",         checked=True)
+        box = QGroupBox("Cell Typing")
+        layout = QVBoxLayout()
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.addWidget(tabs)
+        box.setLayout(layout)
+        return box
 
-        analysis_box = QGroupBox("Analysis Metrics")
-        analysis_col = QVBoxLayout()
-        for cb in (self.use_baseline_checkbox,
-                   self.baseline_hazard_checkbox,
-                   self.binned_hazard_checkbox):
-            analysis_col.addWidget(cb)
-        analysis_box.setLayout(analysis_col)
+    def _create_cck_tab(self) -> QWidget:
+        self.cck_time_input = QLineEdit(placeholderText="Optional")
+        self.cck_time_input.setFixedWidth(100)
 
-        export_box = QGroupBox("Extra Export Options")
-        export_col = QVBoxLayout()
-
-        label_row = QHBoxLayout()
-        label_row.addWidget(self.group_label_data_checkbox)
-        label_row.addWidget(make_help_icon(
-            "If multiple clusters share a label (e.g. 'good'),\n"
-            "their mean ± SEM is exported in a sheet."
+        row = QHBoxLayout()
+        row.addWidget(QLabel("CCK Time (s):"))
+        row.addWidget(self.cck_time_input)
+        row.addWidget(make_help_icon(
+            "IV CCK injection time (seconds from recording start).\n\n"
+            "Classifies cells using firing rate 5 min before\n"
+            "vs. 5 min after injection (1 min bins):\n\n"
+            "  delta ≥ +0.5 Hz → Putative Oxytocin\n"
+            "  delta  < +0.5 Hz → Putative Vasopressin\n\n"
+            "Pre-window slope is checked for baseline stability.\n"
+            "Results exported to CCK_Cell_Typing sheet."
         ))
-        label_row.addStretch()
+        row.addStretch()
 
-        export_col.addLayout(label_row)
-        export_col.addWidget(self.all_graphs_checkbox)
-        export_col.addWidget(self.txt_export_checkbox)
-        export_box.setLayout(export_col)
+        w = QWidget()
+        w.setLayout(row)
+        return w
 
-        wrapper_box = QGroupBox()
-        wrapper_layout = QVBoxLayout()              # stack rows vertically
+    def _create_pe_tab(self) -> QWidget:
+        self.pe_time_input = QLineEdit(placeholderText="Optional")
+        self.pe_time_input.setFixedWidth(100)
 
-        top_row = QHBoxLayout()
-        top_row.addWidget(analysis_box)
-        top_row.addWidget(export_box)
-        wrapper_layout.addLayout(top_row)
+        row = QHBoxLayout()
+        row.addWidget(QLabel("PE Time (s):"))
+        row.addWidget(self.pe_time_input)
+        row.addWidget(make_help_icon(
+            "IV Phenylephrine (PE) injection time (seconds from recording start).\n\n"
+            "Classifies cells using firing rate 1 min before\n"
+            "vs. 1 min after injection (10 s bins):\n\n"
+            "  delta ≤ -0.5 Hz → Putative Vasopressin\n"
+            "  delta  > -0.5 Hz → Putative Oxytocin\n\n"
+            "Pre-window slope is checked for baseline stability.\n"
+            "Results exported to PE_Cell_Typing sheet."
+        ))
+        row.addStretch()
 
-        self.run_button = QPushButton(
-            "Run Analysis", clicked=self._run_analysis)
-        self.run_button.setStyleSheet("padding:10px;font-weight:bold;")
-        self.run_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        w = QWidget()
+        w.setLayout(row)
+        return w
 
-        wrapper_layout.addWidget(self.run_button)    # full width by default
-        wrapper_box.setLayout(wrapper_layout)
+    def _create_options_group(self) -> QGroupBox:
+        self.binned_hazard_checkbox = QCheckBox("Binned ISI && Hazard")
+        self.binned_hazard_checkbox.setChecked(True)
+        self.binned_hazard_checkbox.setToolTip(
+            "Compute ISI histograms and hazard functions for:\n"
+            "  • Full recording\n"
+            "  • Early window (set by ISI Hazard Window below)\n\n"
+            "Output: isi_and_hazard_analysis.xlsx"
+        )
+        self.peri_hazard_checkbox = QCheckBox("Peri-drug Hazard")
+        self.peri_hazard_checkbox.setChecked(True)
+        self.peri_hazard_checkbox.setToolTip(
+            "For each drug event with a peri window, compute ISI\n"
+            "and hazard separately for the pre and post epochs.\n\n"
+            "Useful for detecting ADP/AHP changes after drug.\n"
+            "Adds Peri_<Drug>_ISI and Peri_<Drug>_Hazard sheets\n"
+            "to isi_and_hazard_analysis.xlsx."
+        )
+        self.txt_export_checkbox = QCheckBox("Export TXT (Clampfit)")
+        self.txt_export_checkbox.setChecked(True)
+        self.all_graphs_checkbox = QCheckBox("Export All Graphs")
+        self.all_graphs_checkbox.setChecked(True)
+        self.group_label_data_checkbox = QCheckBox("Mean by Label")
+        self.group_label_data_checkbox.setChecked(True)
+        self.peri_drug_checkbox = QCheckBox("Peri-drug Sheets")
+        self.peri_drug_checkbox.setChecked(True)
+        self.peri_drug_checkbox.setToolTip(
+            "For each drug event that has a peri-drug window set,\n"
+            "export a firing rate sheet covering that window\n"
+            "(e.g. 30 s pre → 90 s post) using the current bin size.\n\n"
+            "Set the peri window in the 'Add Drug Event' panel (Peri column)."
+        )
 
-        return wrapper_box
+        # 2 columns × 3 rows grid
+        grid_widget = QWidget()
+        from PySide6.QtWidgets import QGridLayout
+        grid = QGridLayout()
+        grid.setSpacing(4)
+        grid.setContentsMargins(0, 0, 0, 0)
+        checkboxes = [
+            self.binned_hazard_checkbox,
+            self.peri_hazard_checkbox,
+            self.txt_export_checkbox,
+            self.all_graphs_checkbox,
+            self.group_label_data_checkbox,
+            self.peri_drug_checkbox,
+        ]
+        for i, cb in enumerate(checkboxes):
+            grid.addWidget(cb, i // 2, i % 2)
+        grid_widget.setLayout(grid)
+
+        layout = QVBoxLayout()
+        layout.addWidget(grid_widget)
+
+        box = QGroupBox("Output Options")
+        box.setLayout(layout)
+        return box
+
+    # ── Right column ─────────────────────────────────────────────────────────
+
+    def _create_right_column(self) -> QVBoxLayout:
+        col = QVBoxLayout()
+        col.setSpacing(8)
+        col.addWidget(self._create_drug_input_group())
+        col.addWidget(self._create_drug_table_group(), stretch=1)
+        col.addLayout(self._create_run_row())
+        return col
 
     def _create_drug_input_group(self) -> QGroupBox:
-        self.drug_name_input = QLineEdit(
-            placeholderText="e.g. Hypertonic Saline")
-        self.peri_drug_input = QLineEdit(
-            placeholderText="Optional – 60 or 30/90")
-        self.drug_start_input = QLineEdit()
-        self.drug_end_input = QLineEdit()
-        add_button = QPushButton("Add", clicked=self._add_drug_event)
+        self.drug_name_input = QLineEdit(placeholderText="e.g. Oxytocin")
+        self.drug_route_combo = QComboBox()
+        self.drug_route_combo.addItems(["Microdialysis", "IV"])
+        self.drug_route_combo.setFixedWidth(120)
+        self.drug_start_input = QLineEdit(placeholderText="s")
+        self.drug_end_input = QLineEdit(placeholderText="s  (optional)")
+        self.drug_end_input.setToolTip(
+            "Leave blank for an acute injection (single time point).\n"
+            "Enter a time in seconds for a continuous event, or 'max' to use the recording end."
+        )
+        self.peri_drug_input = QLineEdit(placeholderText="e.g. 60 or 30/90")
 
-        # peri-drug field + help icon
-        peri_layout = QHBoxLayout()
-        peri_layout.setContentsMargins(0, 0, 0, 0)
-        peri_layout.setSpacing(4)
-        peri_layout.addWidget(self.peri_drug_input)
-        peri_layout.addWidget(make_help_icon(
-            "Set pre/post window in seconds:\n"
-            "  60    → 60 s both sides\n"
-            " 30/90 → 30 s pre, 90 s post"))
+        self.drug_start_input.setFixedWidth(70)
+        self.drug_end_input.setFixedWidth(110)
+
+        peri_row = QHBoxLayout()
+        peri_row.setContentsMargins(0, 0, 0, 0)
+        peri_row.setSpacing(4)
+        peri_row.addWidget(self.peri_drug_input)
+        peri_row.addWidget(make_help_icon(
+            "Pre/post window in seconds around drug onset.\n"
+            "Used for plot shading AND for exporting a\n"
+            "dedicated peri-drug firing rate sheet\n"
+            "(if 'Peri-drug Sheets' is checked in Output Options).\n\n"
+            "  60    → 60 s before and after\n"
+            "  30/90 → 30 s pre, 90 s post"
+        ))
         peri_widget = QWidget()
-        peri_widget.setLayout(peri_layout)
+        peri_widget.setLayout(peri_row)
 
-        grid = QGridLayout()
-        grid.addWidget(QLabel("Drug Name:"),    0, 0)
-        grid.addWidget(self.drug_name_input,  0, 1)
-        grid.addWidget(QLabel("Peri-drug (s):"), 0, 2)
-        grid.addWidget(peri_widget,           0, 3)
-        grid.addWidget(QLabel("Start Time (s):"), 1, 0)
-        grid.addWidget(self.drug_start_input, 1, 1)
-        grid.addWidget(QLabel("End Time (s):"), 1, 2)
-        grid.addWidget(self.drug_end_input,   1, 3)
+        add_btn = QPushButton("Add Drug Event")
+        add_btn.clicked.connect(self._add_drug_event)
 
-        hint_label = QLabel("Right-click a table row to delete.")
-        hint_label.setStyleSheet("font-size:9pt;color:gray;")
+        row1 = QHBoxLayout()
+        row1.addWidget(QLabel("Name:"))
+        row1.addWidget(self.drug_name_input)
+        row1.addWidget(QLabel("Route:"))
+        row1.addWidget(self.drug_route_combo)
+        row1.addStretch()
 
-        group_layout = QVBoxLayout()
-        group_layout.addLayout(grid)
+        row2 = QHBoxLayout()
+        row2.addWidget(QLabel("Start (s):"))
+        row2.addWidget(self.drug_start_input)
+        row2.addWidget(QLabel("End (s):"))
+        row2.addWidget(self.drug_end_input)
+        row2.addWidget(QLabel("Peri (s):"))
+        row2.addWidget(peri_widget)
+        row2.addStretch()
+
+        hint = QLabel("Right-click a row to remove it.")
+        hint.setStyleSheet("color: gray; font-size: 8pt;")
+
         bottom_row = QHBoxLayout()
-        bottom_row.addWidget(hint_label)
+        bottom_row.addWidget(hint)
         bottom_row.addStretch()
-        bottom_row.addWidget(add_button)
-        group_layout.addLayout(bottom_row)
+        bottom_row.addWidget(add_btn)
 
-        drug_group_box = QGroupBox("Add Drug Event")
-        drug_group_box.setLayout(group_layout)
-        return drug_group_box
+        layout = QVBoxLayout()
+        layout.setSpacing(6)
+        layout.addLayout(row1)
+        layout.addLayout(row2)
+        layout.addLayout(bottom_row)
+
+        box = QGroupBox("Add Drug Event")
+        box.setLayout(layout)
+        return box
 
     def _create_drug_table_group(self) -> QGroupBox:
-        self.drug_table = QTableWidget(0, 5)
+        self.drug_table = QTableWidget(0, 6)
         self.drug_table.setHorizontalHeaderLabels(
-            ["Name", "Start", "End", "Start Offset", "End Offset"])
-        self.drug_table.horizontalHeader().setFixedHeight(24)
+            ["Name", "Route", "Start (s)", "End (s)",
+             "Pre Offset", "Post Offset"]
+        )
         self.drug_table.verticalHeader().setVisible(False)
-        self.drug_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.drug_table.horizontalHeader().setFixedHeight(24)
+        self.drug_table.setAlternatingRowColors(True)
+        self.drug_table.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu)
         self.drug_table.customContextMenuRequested.connect(
             self._remove_selected_drug)
-        self.drug_table.setMinimumHeight(200)
 
-        self.drug_table.setColumnWidth(1, 60)
-        self.drug_table.setColumnWidth(2, 60)
-        self.drug_table.setColumnWidth(3, 80)
-        self.drug_table.setColumnWidth(4, 80)
         self.drug_table.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.Stretch)
-        for col in [1, 2, 3, 4]:
-            self.drug_table.horizontalHeader().setSectionResizeMode(col, QHeaderView.Fixed)
+            0, QHeaderView.ResizeMode.Stretch)
+        for col in (1, 2, 3, 4, 5):
+            self.drug_table.horizontalHeader().setSectionResizeMode(
+                col, QHeaderView.ResizeMode.ResizeToContents)
 
-        table_group_box = QGroupBox("Drug Events")
-        table_layout = QVBoxLayout()
-        table_layout.addWidget(self.drug_table)
-        table_group_box.setLayout(table_layout)
-        return table_group_box
+        box = QGroupBox("Drug Events")
+        layout = QVBoxLayout()
+        layout.addWidget(self.drug_table)
+        box.setLayout(layout)
+        return box
 
-    def _create_log_group_box(self) -> QGroupBox:
+    def _create_run_row(self) -> QHBoxLayout:
+        self.run_button = QPushButton("Run Analysis")
+        self.run_button.setFixedHeight(40)
+        self.run_button.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        self.run_button.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.run_button.clicked.connect(self._run_analysis)
+
+        row = QHBoxLayout()
+        row.addStretch()
+        row.addWidget(self.run_button, stretch=1)
+        return row
+
+    def _create_log_group(self) -> QGroupBox:
         self.log_output = QTextEdit(readOnly=True)
-        self.log_output.setMinimumHeight(150)
-        log_group_box = QGroupBox("Output Log")
-        log_layout = QVBoxLayout()
-        log_layout.addWidget(self.log_output)
-        log_group_box.setLayout(log_layout)
-        return log_group_box
+        self.log_output.setMinimumHeight(120)
+        self.log_output.setMaximumHeight(180)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.log_output)
+
+        box = QGroupBox("Output Log")
+        box.setLayout(layout)
+        return box
+
+    # ── Event handlers ───────────────────────────────────────────────────────
 
     def _select_folder(self) -> None:
         path = file_chooser(self)
@@ -307,19 +468,31 @@ class MainWindow(QMainWindow):
         if not path:
             return
 
-        found_files = find_specific_files_in_folder(path, KS_REQUIRED, KS_LABEL_FILES)
+        found_files = find_specific_files_in_folder(
+            path, KS_REQUIRED, KS_LABEL_FILES)
         if found_files:
             self.log_output.append(
                 f"Found {len(found_files)} required file(s):")
             for name in found_files:
                 self.log_output.append(f"  • {name}")
         else:
-            self.log_output.append("No required files found.")
+            self.log_output.append(
+                "No required files found in selected folder.")
             return
 
-        self.controller.try_populate_label_dropdown(found_files,
-                                                    self.cluster_dropdown,
-                                                    self.log_output)
+        self.controller.try_populate_label_dropdown(
+            found_files, self.cluster_dropdown, self.log_output)
+
+    def _on_label_selected(self, index: int) -> None:
+        if index == 0:
+            return
+        label = self.cluster_dropdown.currentText().strip()
+        current = [s.strip()
+                   for s in self.cluster_input.text().split(",") if s.strip()]
+        if label and label not in current:
+            current.append(label)
+            self.cluster_input.setText(", ".join(current))
+        self.cluster_dropdown.setCurrentIndex(0)
 
     def _add_drug_event(self) -> None:
         try:
@@ -327,81 +500,79 @@ class MainWindow(QMainWindow):
                 name=self.drug_name_input.text().strip(),
                 peri_drug=self.peri_drug_input.text().strip(),
                 start_text=self.drug_start_input.text().strip(),
-                end_text=self.drug_end_input.text().strip())
+                end_text=self.drug_end_input.text().strip(),
+            )
         except ValueError as err:
-            self.log_output.append(str(err))
+            self.log_output.append(f"Drug event error: {err}")
             return
 
         row = self.drug_table.rowCount()
         self.drug_table.insertRow(row)
 
-        # Column 0: Name (left-aligned)
-        self.drug_table.setItem(row, 0, QTableWidgetItem(parsed["name"]))
+        def _cell(text: str, centre: bool = True) -> QTableWidgetItem:
+            item = QTableWidgetItem(text)
+            if centre:
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            return item
 
-        # Column 1: Start
-        item = QTableWidgetItem(str(parsed["start"]))
-        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.drug_table.setItem(row, 1, item)
+        def _fmt(v: float | None) -> str:
+            if v is None:
+                return "-"
+            return "max" if math.isinf(v) else str(v)
 
-        # Column 2: End
-        end_val = "-" if parsed.get("end") is None else str(parsed["end"])
-        item = QTableWidgetItem(end_val)
-        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.drug_table.setItem(row, 2, item)
+        self.drug_table.setItem(row, 0, _cell(parsed["name"], centre=False))
+        self.drug_table.setItem(row, 1, _cell(
+            self.drug_route_combo.currentText()))
+        self.drug_table.setItem(row, 2, _cell(str(parsed["start"])))
+        self.drug_table.setItem(row, 3, _cell(_fmt(parsed.get("end"))))
+        self.drug_table.setItem(row, 4, _cell(
+            _fmt(parsed.get("start_offset"))))
+        self.drug_table.setItem(row, 5, _cell(_fmt(parsed.get("end_offset"))))
 
-        # Column 3: Start-Offset
-        pre_val = str(parsed.get("start-offset")
-                    ) if parsed.get("start-offset") is not None else "-"
-        item = QTableWidgetItem(pre_val)
-        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.drug_table.setItem(row, 3, item)
-
-        # Column 4: End-Offset
-        post_val = str(parsed.get("end-offset")
-                       ) if parsed.get("end-offset") is not None else "-"
-        item = QTableWidgetItem(post_val)
-        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.drug_table.setItem(row, 4, item)
-
-    
-        # clear input fields
-        for widget in (self.drug_name_input, self.peri_drug_input,
-                       self.drug_start_input, self.drug_end_input):
-            widget.clear()
+        for w in (self.drug_name_input, self.peri_drug_input,
+                  self.drug_start_input, self.drug_end_input):
+            w.clear()
+        self.drug_route_combo.setCurrentIndex(0)
 
     def _remove_selected_drug(self) -> None:
-        selected_row = self.drug_table.currentRow()
-        if selected_row != -1:
-            self.drug_table.removeRow(selected_row)
+        row = self.drug_table.currentRow()
+        if row != -1:
+            self.drug_table.removeRow(row)
 
-    def _on_cluster_selected(self, index: int) -> None:
-        if index == 0:
-            return  # ignore the “Select label…” placeholder
-        
-        label = self.cluster_dropdown.currentText().strip()
-        current = [s.strip()
-                   for s in self.cluster_input.text().split(",") if s.strip()]
-        
-        if label not in current:
-            current.append(label)
-            self.cluster_input.setText(", ".join(current))
-        
-        self.cluster_dropdown.setCurrentIndex(0)
+    @staticmethod
+    def _parse_optional_float(text: str) -> float | None:
+        s = text.strip()
+        if s in ("", "-"):
+            return None
+        if s.lower() in ("max", "inf"):
+            return float("inf")
+        return float(s)
+
+    def _collect_drug_events(self) -> list[DrugEvent]:
+        events: list[DrugEvent] = []
+        for row in range(self.drug_table.rowCount()):
+            def _text(col: int) -> str:
+                item = self.drug_table.item(row, col)
+                return item.text() if item else ""
+
+            name = _text(0)
+            if not name:
+                continue
+            events.append(DrugEvent(
+                name=name,
+                start=float(_text(2)),
+                end=self._parse_optional_float(_text(3)),
+                pre_time=self._parse_optional_float(_text(4)),
+                post_time=self._parse_optional_float(_text(5)),
+            ))
+        return events
 
     def _run_analysis(self) -> None:
-        drug_events = []
-        for row in range(self.drug_table.rowCount()):
-            name = self.drug_table.item(row, 0).text()
-            start = float(self.drug_table.item(row, 1).text())
-            end_text = self.drug_table.item(row, 2).text()
-            end = None if end_text == "" else float(end_text)
-            pre = self.drug_table.item(row, 3).text()
-            post = self.drug_table.item(row, 4).text()
-            drug_events.append(dict(name=name, start=start, end=end,
-                                    pre_time=pre, post_time=post))
-
-        cck_time = float(self.cck_time_input.text()
-                         ) if self.cck_time_input.text().strip() else None
+        try:
+            drug_events = self._collect_drug_events()
+        except ValueError as e:
+            self.log_output.append(f"Invalid drug table value: {e}")
+            return
 
         self.controller.run_analysis(
             folder=self.folder_input.text(),
@@ -414,11 +585,17 @@ class MainWindow(QMainWindow):
             log=self.log_output,
             use_baseline=self.use_baseline_checkbox.isChecked(),
             run_hazard=self.binned_hazard_checkbox.isChecked(),
-            baseline_hazard=self.baseline_hazard_checkbox.isChecked(),
+            peri_hazard=self.peri_hazard_checkbox.isChecked(),
+            early_hazard_start=self._parse_optional_float(
+                self.isi_hazard_start_input.text()) or 0.0,
+            early_hazard_end=self._parse_optional_float(
+                self.isi_hazard_end_input.text()) or 600.0,
             mean_label_data=self.group_label_data_checkbox.isChecked(),
             export_all_graphs=self.all_graphs_checkbox.isChecked(),
             export_txt=self.txt_export_checkbox.isChecked(),
-            cck_time=cck_time,
-            drug_events=drug_events
+            export_peri_drug=self.peri_drug_checkbox.isChecked(),
+            cck_time=self._parse_optional_float(self.cck_time_input.text()),
+            pe_time=self._parse_optional_float(self.pe_time_input.text()),
+            drug_events=drug_events,
         )
         self.controller.save_temp_settings()

@@ -10,23 +10,23 @@ from src.core.file_manager import (
     create_label_lookup,
     make_output_folders,
     make_specific_folder,
+    KS_REQUIRED,
+    KS_LABEL_FILES,
 )
 
 # --- Test for find_specific_files_in_folder --- #
 def test_find_specific_files_in_folder(tmp_path):
     # Create dummy files in the temporary directory
-    required_files = ["spike_times.npy",
-                      "spike_clusters.npy", "cluster_group.tsv"]
-    for file in required_files:
+    always_files = list(KS_REQUIRED)
+    one_of_files = list(KS_LABEL_FILES)
+    for file in always_files + [one_of_files[0]]:
         (tmp_path / file).write_text("dummy content")
 
-    # Call the function with the temporary directory path
-    file_paths = find_specific_files_in_folder(tmp_path, required_files)
+    file_paths = find_specific_files_in_folder(tmp_path, always_files, one_of_files)
 
-    # Check if all required files are found and paths exist
-    assert set(file_paths.keys()) == set(required_files)
-    for file in required_files:
-        assert (tmp_path / file).exists()
+    # Check that required files and one label file are found
+    assert set(always_files) <= set(file_paths.keys())
+    assert any(f in file_paths for f in one_of_files)
 
 
 # --- Test for load_spike_data --- #
@@ -96,32 +96,23 @@ def test_create_label_lookup_random_str(tmp_path):
         create_label_lookup(tsv_file)
 
 
-# --- Tests for choose_and_validate_ks_folder --- #
-def test_choose_and_validate_ks_folder_success(monkeypatch, tmp_path):
-    # Create dummy required files in the temporary directory.
-    required_files = ["spike_times.npy",
-                      "spike_clusters.npy", "cluster_group.tsv"]
-    for file in required_files:
+# --- Tests for validate_ks_folder --- #
+def test_choose_and_validate_ks_folder_success(tmp_path):
+    # Create the always-required files plus one label file.
+    always_required = list(KS_REQUIRED)
+    one_of_required = list(KS_LABEL_FILES)
+    for file in always_required + [one_of_required[0]]:
         (tmp_path / file).write_text("dummy content")
 
-    # Monkeypatch file_chooser to return our tmp_path as a Path object.
-    monkeypatch.setattr(
-        "pyside_gui.file_chooser.file_chooser", lambda: tmp_path)
-
-    # Call validate_ks_folder and check if it returns the correct file paths.
-    file_paths = validate_ks_folder(tmp_path, required_files)
-    assert set(file_paths.keys()) == set(required_files)
-    for file in required_files:
-        assert (tmp_path / file).exists()
+    file_paths = validate_ks_folder(tmp_path, always_required, one_of_required)
+    assert set(always_required) <= set(file_paths.keys())
+    assert any(f in file_paths for f in one_of_required)
 
 
-def test_choose_and_validate_ks_folder_cancel(monkeypatch):
-    # Monkeypatch file_chooser to simulate cancellation (return None)
-    monkeypatch.setattr("pyside_gui.file_chooser.file_chooser", lambda: None)
-
-    # When no folder is selected, choose_and_validate_ks_folder should raise a FileNotFoundError.
+def test_choose_and_validate_ks_folder_cancel():
+    # When a required file is missing, validate_ks_folder should raise FileNotFoundError.
     with pytest.raises(FileNotFoundError):
-        validate_ks_folder(Path("invalid_path"), ["file1", "file2"])
+        validate_ks_folder(Path("invalid_path"), list(KS_REQUIRED), list(KS_LABEL_FILES))
 
 
 def test_make_specific_folder(tmp_path):

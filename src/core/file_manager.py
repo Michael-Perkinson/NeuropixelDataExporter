@@ -1,36 +1,29 @@
-from typing import Sequence
+from typing import Sequence, Final
 from pathlib import Path
 import numpy as np
+from numpy.typing import NDArray
 import pandas as pd
 
 # Always required from Kilosort output
-KS_REQUIRED = [
-    "spike_times.npy",
-    "spike_clusters.npy",
-]
+KS_REQUIRED: Final[Sequence[str]] = (
+    "spike_times.npy", "spike_clusters.npy")
 
-# One-of required: clustering annotation
-KS_LABEL_FILES = [
-    "cluster_KSLabel.tsv",   # Kilosort4
-    "cluster_group.tsv",     # Phy / Kilosort3
-]
+# One of these must be present for cluster labels
+KS_LABEL_FILES: Final[Sequence[str]] = (
+    "cluster_KSLabel.tsv", "cluster_group.tsv")
 
 
 def find_specific_files_in_folder(
-    folder_path: Path, file_names: list[str]
+    folder_path: Path,
+    always_required: Sequence[str],
+    one_of_required: Sequence[str],
 ) -> dict[str, Path]:
-    """
-    Search for specific files in a folder and return their full paths if found.
-
-    Args
-        folder_path: The directory where the files should be located.
-        file_names: List of filenames to search for.
-
-    Returns
-        A dictionary mapping filenames to their full paths if they exist.
-    """
+    """Return a filename → Path mapping for files present in folder_path."""
+    wanted = list(always_required) + list(one_of_required)
     return {
-        file: folder_path / file for file in file_names if (folder_path / file).exists()
+        name: (folder_path / name)
+        for name in wanted
+        if (folder_path / name).exists()
     }
 
 
@@ -38,39 +31,27 @@ def validate_ks_folder(
     folder_path: Path,
     always_required: Sequence[str],
     one_of_required: Sequence[str],
-) -> dict[str, str]:
+) -> dict[str, Path]:
     """
-    Validate Kilosort output folder.
+    Validate a Kilosort output folder.
 
-    Args:
-        folder_path: Path to the folder being validated.
-        always_required: Filenames that must all be present.
-        one_of_required: A list of filenames where at least one must exist.
-
-    Returns:
-        A dict mapping filenames (present) to their resolved full paths.
-
-    Raises:
-        FileNotFoundError if any always-required file is missing
-        or if none of the one-of-required files are found.
+    Raises FileNotFoundError if any always_required file is missing,
+    or if none of the one_of_required label files are present.
     """
-    # Check always-required files
-    resolved: dict[str, str] = {}
+    resolved: dict[str, Path] = {}
+
     for fname in always_required:
-        fpath = folder_path / fname
+        fpath = (folder_path / fname).resolve()
         if not fpath.exists():
             raise FileNotFoundError(f"Missing required file: {fname}")
-        resolved[fname] = str(fpath)
+        resolved[fname] = fpath
 
-    # Check one-of-required files
-    found = None
     for fname in one_of_required:
-        fpath = folder_path / fname
+        fpath = (folder_path / fname).resolve()
         if fpath.exists():
-            resolved[fname] = str(fpath)
-            found = fname
+            resolved[fname] = fpath
             break
-    if found is None:
+    else:
         raise FileNotFoundError(
             f"Missing label file, need one of: {', '.join(one_of_required)}"
         )
@@ -78,44 +59,23 @@ def validate_ks_folder(
     return resolved
 
 
-
 def load_spike_data(
-    spike_times_path: str, spike_clusters_path: str
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Load and return spike times and cluster IDs from .npy files.
-
-    Args
-        spike_times_path: Path to the spike times file.
-        spike_clusters_path: Path to the spike clusters file.
-
-    Returns
-        A tuple containing:
-        - A flattened NumPy array of spike times.
-        - A flattened NumPy array of cluster IDs.
-    """
-    return np.load(spike_times_path).ravel(), np.load(spike_clusters_path).ravel()
+    spike_times_path: str | Path,
+    spike_clusters_path: str | Path,
+) -> tuple[NDArray[np.float64], NDArray[np.int64]]:
+    """Load and return spike times and cluster IDs from .npy files."""
+    return (
+        np.load(str(spike_times_path)).ravel(),
+        np.load(str(spike_clusters_path)).ravel(),
+    )
 
 
-def create_label_lookup(group_labels_path: str) -> np.ndarray:
-    """
-    Generate a lookup array mapping cluster IDs to group labels.
+def create_label_lookup(group_labels_path: str | Path) -> NDArray[np.object_]:
+    """Return array mapping cluster_id → label string ("unknown" if missing)."""
+    cluster_group = pd.read_csv(str(group_labels_path), sep="\t")
 
-    The TSV file must contain a "cluster_id" column and either "group" or "KSLabel" for labels.
-    Any cluster without a specified label is set to "unknown".
-
-    Args
-        group_labels_path: Path to the TSV file containing cluster labels.
-
-    Returns
-        A NumPy array mapping cluster IDs to their labels.
-
-    Raises
-        ValueError if the required label columns are missing.
-    """
-    cluster_group = pd.read_csv(group_labels_path, sep="\t")
-    max_cluster_id = cluster_group["cluster_id"].max() + 1
-    group_labels_array = np.full(max_cluster_id, "unknown", dtype=object)
+    if "cluster_id" not in cluster_group.columns:
+        raise ValueError("Expected 'cluster_id' column in the file.")
 
     if "group" in cluster_group.columns:
         label_column = "group"
@@ -124,25 +84,18 @@ def create_label_lookup(group_labels_path: str) -> np.ndarray:
     else:
         raise ValueError("Expected 'group' or 'KSLabel' column in the file.")
 
-    group_labels_array[cluster_group["cluster_id"].values] = cluster_group[
-        label_column
-    ].values
+    cluster_ids = pd.to_numeric(
+        cluster_group["cluster_id"], errors="raise").astype(int).to_numpy()
+    labels = cluster_group[label_column].astype(str).to_numpy()
+
+    max_cluster_id = int(cluster_ids.max()) + 1 if cluster_ids.size else 0
+    group_labels_array = np.full(max_cluster_id, "unknown", dtype=np.object_)
+    group_labels_array[cluster_ids] = labels
     return group_labels_array
 
 
 def make_output_folders(data_folder_path: Path) -> tuple[Path, Path, Path]:
-    """
-    Create output folders for analysis results, images, and text files.
-
-    Args
-        data_folder_path: Path to the main data folder.
-
-    Returns
-        A tuple containing:
-        - The path to the analysis results folder.
-        - The path to the image export folder.
-        - The path to the text export folder.
-    """
+    """Create and return (analysis_results/, firing_rate_images/, txt_files/) directories."""
     export_dir = make_specific_folder(data_folder_path, "analysis_results")
     images_dir = make_specific_folder(export_dir, "firing_rate_images")
     txt_export_dir = make_specific_folder(export_dir, "txt_files_for_clampfit_import")
@@ -150,16 +103,7 @@ def make_output_folders(data_folder_path: Path) -> tuple[Path, Path, Path]:
 
 
 def make_specific_folder(folder_path: Path, folder_name: str) -> Path:
-    """
-    Create a folder inside the specified directory if it doesn't exist.
-
-    Args
-        folder_path: The parent directory where the folder will be created.
-        folder_name: Name of the folder to create.
-
-    Returns
-        The full path to the created folder.
-    """
+    """Create folder_path/folder_name if it doesn't exist and return the path."""
     folder = folder_path / folder_name
     folder.mkdir(parents=True, exist_ok=True)
     return folder

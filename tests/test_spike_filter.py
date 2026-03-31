@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from core.spike_filter import (
+from src.core.spike_filter import (
     filter_by_labels,
     filter_by_channels,
     filter_data,
@@ -97,7 +97,7 @@ def test_process_filtered_data():
     np.testing.assert_array_equal(filtered_labels, expected_labels)
 
 
-def test_prepare_filtered_data(monkeypatch, tmp_path):
+def test_prepare_filtered_data(tmp_path):
     # Create dummy required files
     required_files = ["spike_times.npy", "spike_clusters.npy", "cluster_group.tsv"]
     spike_times = np.array([0.1, 0.2, 0.3])
@@ -108,8 +108,6 @@ def test_prepare_filtered_data(monkeypatch, tmp_path):
     df.to_csv(tmp_path / "cluster_group.tsv", sep="\t", index=False)
     file_paths = {f: str(tmp_path / f) for f in required_files}
 
-    # Monkeypatch input so that channels_or_labels_to_export returns "0, A"
-    monkeypatch.setattr("builtins.input", lambda prompt="": "0, A")
     df_out, max_time = prepare_filtered_data(file_paths)
     # Verify DataFrame columns.
     assert set(df_out.columns) == {"spike_times", "spike_clusters", "group"}

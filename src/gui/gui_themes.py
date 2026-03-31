@@ -1,10 +1,12 @@
 # gui_themes.py
+
+from typing import Any
 from PySide6.QtWidgets import QMainWindow, QLabel, QWidget, QVBoxLayout
 from PySide6.QtCore import Qt
 import qdarkstyle
 
 
-def _toggle_theme(main_window: QMainWindow):
+def _toggle_theme(main_window: QMainWindow) -> None:
     if main_window.dark_mode:
         main_window.setStyleSheet(_light_theme())
     else:
@@ -19,22 +21,24 @@ def _toggle_theme(main_window: QMainWindow):
 
 
 def _light_theme() -> str:
-    """Material-inspired light palette that mirrors the dark‐theme spacing."""
-    base_bg = "#fafafa"   # window background
-    panel_bg = "#ffffff"   # group-box / text-field background
-    panel_border = "#d7d7d7"
-    text_fg = "#212121"
-    hint_fg = "#555555"
-    accent = "#00acc1"   # teal 600
-    accent_hover = "#008e9b"
-    header_bg = "#f0f0f0"
-    header_fg = "#333333"
-    selection_bg = "#c0f1ff"
-    tooltip_bg = "#e0f7f5"
+    base_bg = "#f0f2f5"
+    panel_bg = "#ffffff"
+    panel_border = "#c4c8d0"
+    text_fg = "#1a1a2e"
+    hint_fg = "#4a4a6a"
+    accent = "#0077b6"
+    accent_hover = "#005f8e"
+    header_bg = "#e2e6ed"
+    header_fg = "#1a1a2e"
+    selection_bg = "#b8d8f0"
+    tooltip_bg = "#eaf4fb"
+    tab_active_bg = "#ffffff"
+    tab_inactive_bg = "#dde2ea"
+    cb_border = "#7a8599"
 
     return f"""
     QWidget {{
-        font-size: 8pt;
+        font-size: 9pt;
         background-color: {base_bg};
         color: {text_fg};
     }}
@@ -42,9 +46,10 @@ def _light_theme() -> str:
     /* ---------- GroupBox ------------------------------------------- */
     QGroupBox {{
         font-weight: bold;
+        font-size: 9pt;
         border: 1px solid {panel_border};
-        border-radius: 8px;
-        margin-top: 10px;
+        border-radius: 6px;
+        margin-top: 12px;
         background-color: transparent;
     }}
     QGroupBox::title {{
@@ -59,7 +64,7 @@ def _light_theme() -> str:
         background-color: {accent};
         color: white;
         border: none;
-        border-radius: 6px;
+        border-radius: 5px;
         padding: 6px 14px;
         font-weight: 600;
     }}
@@ -67,20 +72,68 @@ def _light_theme() -> str:
         background-color: {accent_hover};
     }}
     QPushButton:disabled {{
-        background-color: #bdbdbd;
-        color: #f5f5f5;
+        background-color: #b0b8c8;
+        color: #f0f0f0;
     }}
 
     /* ---------- LineEdit / TextEdit -------------------------------- */
     QLineEdit, QTextEdit {{
         background-color: {panel_bg};
         border: 1px solid {panel_border};
-        border-radius: 6px;
+        border-radius: 5px;
         padding: 4px 6px;
         color: {text_fg};
     }}
-    QTextEdit {{
-        background-color: #fcfcfc;
+    QLineEdit:focus, QTextEdit:focus {{
+        border: 1.5px solid {accent};
+    }}
+
+    /* ---------- CheckBox ------------------------------------------- */
+    QCheckBox {{
+        color: {text_fg};
+        spacing: 6px;
+        font-size: 9pt;
+    }}
+    QCheckBox::indicator {{
+        width: 15px;
+        height: 15px;
+        border: 2px solid {cb_border};
+        border-radius: 3px;
+        background-color: {panel_bg};
+    }}
+    QCheckBox::indicator:checked {{
+        background-color: {accent};
+        border-color: {accent};
+        image: url(:/qt-project.org/styles/commonstyle/images/checkbox_checked-16.png);
+    }}
+    QCheckBox::indicator:hover {{
+        border-color: {accent};
+    }}
+
+    /* ---------- TabWidget / TabBar --------------------------------- */
+    QTabWidget::pane {{
+        border: 1px solid {panel_border};
+        border-radius: 4px;
+        background-color: {tab_active_bg};
+    }}
+    QTabBar::tab {{
+        background-color: {tab_inactive_bg};
+        color: {hint_fg};
+        border: 1px solid {panel_border};
+        border-bottom: none;
+        border-radius: 4px 4px 0 0;
+        padding: 5px 14px;
+        margin-right: 2px;
+        font-size: 9pt;
+    }}
+    QTabBar::tab:selected {{
+        background-color: {tab_active_bg};
+        color: {accent};
+        font-weight: bold;
+        border-bottom: 1px solid {tab_active_bg};
+    }}
+    QTabBar::tab:hover:!selected {{
+        background-color: #cdd4df;
     }}
 
     /* ---------- TableWidget ---------------------------------------- */
@@ -91,14 +144,14 @@ def _light_theme() -> str:
         selection-background-color: {selection_bg};
         selection-color: {text_fg};
         border: 1px solid {panel_border};
-        alternate-background-color: #f9f9f9;
+        alternate-background-color: #f5f7fa;
     }}
     QHeaderView::section {{
         background-color: {header_bg};
         color: {header_fg};
-        padding: 6px;
+        padding: 5px;
         border: 1px solid {panel_border};
-        font-weight: 500;
+        font-weight: 600;
     }}
 
     /* ---------- ComboBox ------------------------------------------- */
@@ -110,16 +163,14 @@ def _light_theme() -> str:
         color: {text_fg};
         min-height: 22px;
     }}
+    QComboBox:focus {{
+        border: 1.5px solid {accent};
+    }}
     QComboBox::drop-down {{
         subcontrol-origin: padding;
         subcontrol-position: top right;
         width: 16px;
         border-left: 1px solid {panel_border};
-    }}
-    QComboBox::down-arrow {{
-        image: url(:/qt-project.org/styles/commonstyle/images/arrowdown-16.png);
-        width: 12px;
-        height: 12px;
     }}
     QComboBox QAbstractItemView {{
         background-color: {panel_bg};
@@ -146,7 +197,7 @@ def _light_theme() -> str:
     /* ---------- ToolTip -------------------------------------------- */
     QToolTip {{
         background-color: {tooltip_bg};
-        color: {accent};
+        color: {text_fg};
         border: 1px solid {accent};
         padding: 6px;
         border-radius: 4px;
@@ -155,7 +206,7 @@ def _light_theme() -> str:
     """
 
 
-def _dark_theme():
+def _dark_theme() -> Any:
     return qdarkstyle.load_stylesheet()
 
 
@@ -176,7 +227,7 @@ def make_help_icon(text: str) -> QWidget:
     return wrapper
 
 
-def help_icon_style(dark_mode=False):
+def help_icon_style(dark_mode: bool = False) -> str:
     if dark_mode:
         return """
         QLabel {

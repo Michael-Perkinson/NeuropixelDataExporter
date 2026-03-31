@@ -1,134 +1,265 @@
-
 # Neuropixel Data Exporter
 
-Neuropixel Data Exporter is a tool for analyzing and exporting Neuropixel spike data, post-Kilosort processing. This script enables users to select specific clusters, calculate firing rates, ISI histograms, and hazard functions, and export results in structured formats.
+A PySide6 desktop application for analysing and exporting Neuropixel spike data following Kilosort spike-sorting. The tool provides a graphical interface for cluster selection, firing rate analysis, cell-type classification (oxytocin vs vasopressin), ISI/hazard function analysis, and multi-sheet Excel export — replacing the original terminal-based script (`export_clusters.py`).
 
-**Note**: If you download a new version of the script, remember to re-run pip install -r requirements.txt in the export_env to ensure all dependencies are up-to-date.
+> **Upgrading from v1.x?** The tool is now a GUI application. See [What's New](#whats-new) and the [CHANGELOG](CHANGELOG.md) for a full breakdown.
+
+---
 
 ## Features
 
-- **Cluster Selection**: Choose specific clusters for analysis (can use labels from Phy).
-- **Spike Time Filtering**: Filter spikes based on specified time ranges and drug application time.
-- **Firing Rate Calculation**: Calculate firing rates for each cluster using user-defined time bins.
-- **ISI Histogram & Hazard Function**: Generate ISI histograms and calculate hazard functions with summary metrics.
-- **Baseline Analysis**: Includes the option to calculate ISI and hazard functions for baseline data and exports them to separate sheets for comparison.
-- **Delta Firing Rates**: Compute delta firing rates relative to a baseline period, if specified.
-- **Data Export**: Save spike times, firing rates, ISI histograms, and hazard functions as structured CSV files, Excel files, and text files.
-- **Interactive Plots**: Generate HTML plots of firing rates for each cluster with optional drug application markers.
-  
-## What's New
+### Graphical Interface
+- Fixed-size (1080×720) two-column PySide6 window — analysis settings on the left, drug event management on the right
+- Light theme with clear section grouping; dark mode toggle available under Settings
+- Analysis runs on a background thread — the GUI stays responsive during long exports
+- Session persistence — most settings are remembered between runs
+- Import/export of full settings as a JSON file (Settings menu)
 
-See the detailed update history in the [CHANGELOG.md](CHANGELOG.md).
+### Cluster Selection
+- Enter cluster IDs numerically (`1, 5, 12`) or by Kilosort/Phy label (`good`, `mua`, or any custom label)
+- Mix numeric and label inputs in a single field (e.g. `good, 14, 22`)
+- Label dropdown auto-populates from the selected data folder
+
+### Firing Rate Analysis
+- Configurable analysis window (start/end time in seconds; leave end blank to use recording maximum)
+- User-defined bin size (default 60 s)
+- Optional firing rate baseline: specify a window (start/end) to compute mean baseline firing rate for delta-from-baseline export
+
+### Cell-Type Classification
+Two independent IV injection protocols for classifying magnocellular neurons as putative Oxytocin or Vasopressin:
+
+**CCK (IV)** — Cholecystokinin protocol
+- Compares mean firing rate 5 minutes before vs 5 minutes after injection (1-minute bins)
+- delta ≥ +0.5 Hz → Putative Oxytocin
+- delta < +0.5 Hz → Putative Vasopressin
+- Pre-window linear regression flags baseline stability (Stable / Small / Medium / Large drift)
+
+**PE (IV)** — Phenylephrine protocol
+- Compares mean firing rate 1 minute before vs 1 minute after injection (10-second bins)
+- delta ≤ −0.5 Hz → Putative Vasopressin
+- delta > −0.5 Hz → Putative Oxytocin
+- Pre-window linear regression flags baseline stability
+
+Both protocols export a dedicated sheet with Pre_Mean_FR_Hz, Post_Mean_FR_Hz, Delta_FR_Hz, Classification, and a human-readable Baseline_Stability column.
+
+### Drug Event Management
+- Add named drug events with route (Microdialysis / IV), onset time, and optional offset time
+- Enter `max` as the end time for a drug that runs to the end of the recording
+- Set a peri-drug window per drug (e.g. `600/0` = 600 s pre, 0 s post; `60` = 60 s each side)
+- Multiple drugs supported simultaneously; right-click a row to remove it
+
+### ISI Histogram & Hazard Function
+- Full-recording ISI histogram and hazard function
+- Configurable early-recording reference window (default 0–600 s, "ISI Hazard Window" in the Analysis section) — useful as a pre-drug reference when the exact drug times vary
+- Optional peri-drug hazard: for each drug with a peri window, pre and post epoch ISI histograms and hazard functions are computed and written side-by-side for direct comparison
+- All hazard output goes to a single `isi_and_hazard_analysis.xlsx` file
+
+### Output Options (all toggleable)
+| Checkbox | What it produces |
+|---|---|
+| Binned ISI & Hazard | `isi_and_hazard_analysis.xlsx` with full and early-window sheets |
+| Peri-drug Hazard | Adds `Peri_<Drug>_ISI` and `Peri_<Drug>_Hazard` sheets per drug |
+| Export TXT (Clampfit) | `.txt` files in `txt_files_for_clampfit_import/` |
+| Export All Graphs | Interactive HTML plots in `firing_rate_images/` |
+| Mean by Label | `Mean_by_Label` sheet + `MeanPeri_<Drug>` peri sheets averaged by group |
+| Peri-drug Sheets | `Peri_<Drug>` firing rate sheets time-aligned to each drug onset |
+
+### Interactive Plots
+- Per-cluster HTML bar charts (Plotly) with drug event overlays
+- Point events (no end time) shown as dashed vertical lines with labels
+- Continuous events (with start + end) shown as shaded regions
+- `max` end times resolve to the actual recording end in the plot
+
+---
+
+## Project Structure
+
+```
+NeuropixelDataExporter/
+├── main.py                        # Entry point — launches the GUI
+├── src/
+│   ├── core/
+│   │   ├── cck_analysis.py        # CCK and PE cell-type classification engine
+│   │   ├── file_manager.py        # Kilosort folder validation and file loading
+│   │   ├── firing_rate.py         # Firing rate calculation and dataframe construction
+│   │   ├── input_parser.py        # Cluster/label and drug event input parsing
+│   │   ├── interactive_plot.py    # Plotly HTML export
+│   │   ├── isi_hazard.py          # ISI histogram and hazard function calculation
+│   │   ├── results_writer.py      # Excel multi-sheet export
+│   │   └── spike_filter.py        # Spike data loading and filtering
+│   └── gui/
+│       ├── gui_controller.py      # Controller — input validation, threading, settings
+│       ├── gui_themes.py          # QSS stylesheets (light/dark)
+│       ├── view.py                # MainWindow — all UI construction
+│       └── file_chooser.py        # Folder browser dialog
+└── tests/
+    └── test_firing_rate.py
+```
+
+---
 
 ## Installation
 
-1. **Clone the Repository**  
-   Clone this repository to your local system.
+### Prerequisites
+- Python 3.11 or later
+- A Kilosort output folder containing:
+  - `spike_times.npy`
+  - `spike_clusters.npy`
+  - `cluster_group.tsv` **or** `cluster_KSLabel.tsv`
+
+### Setup
+
+1. **Clone the repository**
 
    ```bash
    git clone https://github.com/Michael-Perkinson/NeuropixelDataExporter.git
    cd NeuropixelDataExporter
    ```
 
-   Or download and unzip the repository directly, then navigate to the folder:
+2. **Create a virtual environment**
 
+   **Conda:**
    ```bash
-   cd /path/to/NeuropixelDataExporter/
+   conda create -n export_env python=3.11
+   conda activate export_env
+   pip install -r requirements.txt
    ```
 
-2. **Create a Virtual Environment**  
-   It’s recommended to use a virtual environment to manage dependencies. Run one of the following commands to create one, naming it `export_env`:
+   **Standard venv (Windows):**
+   ```bash
+   python -m venv export_env
+   export_env\Scripts\activate
+   pip install -r requirements.txt
+   ```
 
-   ### Conda Environment Setup
+3. **Run the application**
 
-   - Create an environment named `export_env` using Conda:
+   ```bash
+   python main.py
+   ```
 
-     ```bash
-     conda create -n export_env
-     conda activate export_env
-     ```
+> **Note:** If you pull a new version, always re-run `pip install -r requirements.txt` inside your activated environment to pick up any new dependencies.
 
-   - Install the required dependencies:
-
-     ```bash
-     pip install -r requirements.txt
-     ```
-
-   ### Standard Python (venv) Setup
-
-   - Create a virtual environment named `export_env`:
-
-     ```bash
-     python -m venv export_env
-     ```
-
-   - Activate the environment:
-
-     ```bash
-     export_env\Scripts\activate
-     ```
-
-   - Install the required dependencies:
-
-     ```bash
-     pip install -r requirements.txt
-     ```
+---
 
 ## Usage
 
-1. **Activate the Environment**  
-   Run one of the below codes depending on how you set up your environment:
+### 1. Select a Data Folder
+Click **Browse** and navigate to your Kilosort output folder. The app will validate that the required files are present and populate the cluster label dropdown automatically.
 
-   ### Conda Environment
+### 2. Configure Analysis
 
-      ```bash
-      conda activate export_env 
-      ```
+**Analysis section (left column, top):**
+- **Clusters / Labels** — enter the clusters or labels to analyse
+- **Start / End / Bin** — time window and bin size for firing rate calculation
+- **FR Baseline** — tick and enter a window to compute a firing rate baseline for delta export
+- **ISI Hazard Window** — set the early-recording reference window for hazard analysis (default 0–600 s); this is independent of the FR Baseline
 
-   ### Standard Python (venv)
+**Cell Typing tabs:**
+- Enter the CCK injection time (seconds) in the CCK tab to run the OT/VP classification protocol
+- Enter the PE injection time in the PE tab to run the PE protocol
+- Both are optional and independent; leave blank to skip
 
-      ```bash
-      export_env\Scripts\activate
-      ```
+**Output Options (left column, bottom):**
+Tick the outputs you want. All are on by default.
 
-2. **Run the Script**  
-   Start the analysis with:
+### 3. Add Drug Events
 
-   ```bash
-   python export_clusters.py
-   ```
+In the right column, fill in the drug name, route, start time (seconds), and optionally:
+- **End time** — leave blank for an acute injection; enter a time in seconds for a continuous infusion; enter `max` to use the recording end
+- **Peri (s)** — enter `60` for a symmetric 60 s window or `300/60` for 300 s pre / 60 s post
 
-3. **Select Data Folder**  
-   When prompted, select the folder containing the following files:
-   - `spike_times.npy`: Array of spike times in samples.
-   - `spike_clusters.npy`: Array of cluster labels corresponding to each spike.
-   - `cluster_group.tsv`: A tab-separated values file containing cluster IDs and their associated group labels, used to map clusters to specific groups for filtering.
+Click **Add Drug Event**. Events appear in the table below; right-click to remove. Multiple drugs can be added.
 
-4. **Provide Input Parameters**  
-   The script will prompt you to enter:
-   - **Clusters to Export**: Enter the clusters you want to analyze as specific channels (e.g., `5,7,12`) or labels (e.g., `good, mua`). If using labels, it's best to use the custom ones you can make when curating your data in Phy.
-   - **Drug Application Time**: Enter the time (in seconds) when the drug was applied, or press Enter to skip.
-   - **Start and End Times**: Specify the time range for analysis, or press Enter to analyze the full range.
-   - **Bin Size**: Enter the bin size in seconds for firing rate calculation, or press Enter to use the default of 1 second.
-   - **Baseline times**: Enter the start and end times (in seconds) for the baseline period, used to calculate the baseline firing rate for delta firing rate computation.
+### 4. Run Analysis
 
-5. **Outputs**  
-   A new folder will be created in the selected data directory containing:
-   - **CSV Files**:
-     - `spike_times_by_cluster_time_ms.csv`: Spike times (in ms) for each selected cluster.
-     - `firing_rates_by_cluster.csv`: Firing rates (in Hz) for each cluster over time.
-   - **HTML Plots**: Interactive HTML plots of firing rates for each cluster, saved in a `firing_rate_images` folder.
-   - **TXT Files**: For importing directly into Clampfit for offline analysis, saved in a `txt_files_for_clampfit_import` folder.
-   - - **Baseline Data**: If baseline analysis is performed, separate sheets will include:
-       - `Baseline_ISI_Histogram`: Interspike interval histogram data for baseline period.
-       - `Baseline_Hazard_Function`: Hazard function values for baseline period.
-       - `Baseline_Hazard_Summary`: Summary metrics for baseline hazard function.
+Click **Run Analysis**. Progress appears in the log at the bottom. The button disables during the run and re-enables when complete.
 
-This tool provides a streamlined process for analyzing Neuropixel spike data, with outputs designed for easy data interpretation and visualization.
+---
+
+## Outputs
+
+All output is saved to a timestamped folder inside your data folder.
+
+### `firing_rates_by_cluster.xlsx`
+
+| Sheet | Contents |
+|---|---|
+| **Summary** | Recording parameters, protocol details, neuron counts (total / putative OT / putative VP per protocol), peri-drug window ranges, any clipping warnings |
+| **Delta_from_Baseline** | Per-cluster firing rate change from baseline (if FR Baseline enabled) |
+| **Baseline_Stats** | Mean and SD of firing rate across the baseline window |
+| **CCK_Cell_Typing** | Pre_Mean_FR_Hz, Post_Mean_FR_Hz, Delta_FR_Hz, Classification, Baseline_Stability |
+| **PE_Cell_Typing** | Same format as CCK_Cell_Typing |
+| **Peri_\<Drug\>** | Binned firing rates over the peri-drug window, t=0 at drug onset |
+| **MeanPeri_\<Drug\>** | As above but averaged by Phy group label (if Mean by Label enabled) |
+| **Mean_by_Label** | Firing rates averaged per label group across the full recording window |
+| **Binned_Firing_Rates** | Raw per-cluster firing rates across the full recording window (always last) |
+
+### `isi_and_hazard_analysis.xlsx`
+
+| Sheet | Contents |
+|---|---|
+| **Full_ISI** | ISI histogram counts — full recording |
+| **Full_Hazard** | Hazard function values — full recording |
+| **Full_Hazard_Summary** | Peak early hazard, mean late hazard, and hazard ratio per cluster |
+| **Early_ISI (X–Ys)** | ISI histogram for the configured early window (default 0–600 s) |
+| **Early_Hazard (X–Ys)** | Hazard function for the early window |
+| **Early_Hazard_Summary** | Summary metrics for the early window |
+| **Peri_\<Drug\>_ISI** | Combined pre (\_Pre) and post (\_Post) ISI columns per cluster |
+| **Peri_\<Drug\>_Hazard** | Combined pre and post hazard columns per cluster |
+
+### `spike_times_by_cluster_time_ms.csv`
+Raw spike times in milliseconds for each selected cluster.
+
+### `firing_rate_images/`
+One interactive HTML file per cluster with firing rate bars and drug event overlays (vertical lines for acute events, shaded regions for continuous events).
+
+### `txt_files_for_clampfit_import/`
+Per-cluster `.txt` files formatted for direct import into Clampfit (if Export TXT enabled).
+
+---
+
+## Classification Thresholds and Constants
+
+All protocol thresholds are defined as module-level constants in `src/core/cck_analysis.py` for easy adjustment:
+
+```python
+CCK_WINDOW_S          = 300.0   # pre/post window (seconds)
+CCK_BIN_S             = 60.0    # bin size (seconds)
+CCK_THRESHOLD_HZ      = 0.5     # delta threshold for OT classification
+CCK_STABILITY_HZ_PER_MIN = 0.1  # slope above which baseline is flagged
+
+PE_WINDOW_S           = 60.0
+PE_BIN_S              = 10.0
+PE_THRESHOLD_HZ       = -0.5
+PE_STABILITY_HZ_PER_MIN = 0.1
+```
+
+Baseline stability categories (applied to both protocols):
+
+| Category | Slope magnitude |
+|---|---|
+| Stable | ≤ 0.1 Hz/min |
+| Small drift | 0.1 – 0.3 Hz/min |
+| Medium drift | 0.3 – 0.6 Hz/min |
+| Large drift ⚠ | > 0.6 Hz/min |
+
+---
 
 ## Dependencies
 
-Ensure all dependencies are installed from `requirements.txt` to run the script successfully.
+See `requirements.txt`. Key packages:
+
+| Package | Purpose |
+|---|---|
+| PySide6 | GUI framework |
+| numpy | Array operations |
+| pandas | Dataframe construction and Excel export |
+| xlsxwriter | Multi-sheet `.xlsx` writing |
+| plotly | Interactive HTML plots |
+| scipy | Linear regression for baseline stability |
+
+---
 
 ## License
 

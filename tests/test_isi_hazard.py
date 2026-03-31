@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from core.isi_hazard import (
+from src.core.isi_hazard import (
     calculate_isi_histogram,
     compute_hazard_values,
     compute_hazard_summary,

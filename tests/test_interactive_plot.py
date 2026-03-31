@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from core.interactive_plot import export_firing_rate_html
+from src.core.interactive_plot import export_firing_rate_html
 
 
 def test_export_firing_rate_html(tmp_path):
@@ -14,16 +14,14 @@ def test_export_firing_rate_html(tmp_path):
         }
     )
     bin_size = 1.0
-    drug_time = 1.5  # a sample drug time
+    drug_events = [{"name": "Saline", "start": 1.5, "end": None}]
 
     # Create a temporary directory for the exported plots.
     images_export_dir = tmp_path / "plots"
     images_export_dir.mkdir(parents=True, exist_ok=True)
 
     # Call the function to export HTML plots.
-    export_firing_rate_html(
-        df, images_export_dir, bin_size, drug_time
-    )  # ✅ No str conversion
+    export_firing_rate_html(df, images_export_dir, bin_size, drug_events)
 
     # Check that an HTML file exists for each cluster.
     for cluster in ["Cluster_0", "Cluster_1"]:
