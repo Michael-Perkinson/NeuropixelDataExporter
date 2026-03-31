@@ -1,0 +1,10 @@
+{
+    "optional_outputs": {
+        "export_txt": true,
+        "export_all_graphs": true,
+        "baseline_hazard": true,
+        "binned_hazard": true,
+        "export_peri_drug": true
+    },
+    "theme": "light"
+}
