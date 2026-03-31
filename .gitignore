@@ -46,6 +46,7 @@ htmlcov/
 nosetests.xml
 coverage.xml
 *.cover
+.claude
 *.py,cover
 .hypothesis/
 .pytest_cache/
@@ -165,3 +166,4 @@ cython_debug/
 #.idea/
 
 
+dev-requirements.txt
