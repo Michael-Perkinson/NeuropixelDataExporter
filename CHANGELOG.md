@@ -145,6 +145,7 @@ This release is a complete rewrite of the tool. The original monolithic terminal
 - `export_hazard_excel()` positional argument error — optional arguments are now passed as keyword-only
 - All output checkboxes now default to checked (previously defaulted to unchecked, causing no outputs)
 - `prepare_filtered_data` unused top-level import warning in `gui_controller.py` — removed; function is now imported locally where needed
+- `isi_hazard` functions now validate window/baseline ranges and non-negative monotonic spike times, with dedicated tests for empty windows and non-monotonic input ordering
 
 ---
 

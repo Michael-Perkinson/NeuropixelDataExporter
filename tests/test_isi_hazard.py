@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from src.core.isi_hazard import (
+    calculate_windowed_isi,
     calculate_isi_histogram,
     compute_hazard_values,
     compute_hazard_summary,
@@ -41,6 +42,66 @@ def test_calculate_isi_histogram_without_baseline():
     assert baseline_isi_df is None
 
 
+def test_calculate_windowed_isi():
+    data_export = {
+        0: np.array([100, 200, 400]),
+    }
+    result_df = calculate_windowed_isi(
+        data_export,
+        window_start=0.15,
+        window_end=0.5,
+        time_bin=0.1,
+        max_isi_time=0.5,
+    )
+
+    assert set(result_df.columns) == {"Bin_Starts", "Cluster_0"}
+    assert result_df["Cluster_0"].sum() == 1
+
+
+def test_calculate_windowed_isi_empty_window():
+    data_export = {
+        0: np.array([100, 200, 300]),
+    }
+    result_df = calculate_windowed_isi(
+        data_export,
+        window_start=1.0,
+        window_end=2.0,
+        time_bin=0.1,
+        max_isi_time=0.5,
+    )
+
+    assert result_df["Cluster_0"].sum() == 0
+
+
+def test_calculate_windowed_isi_non_monotonic_sorts():
+    data_export = {
+        0: np.array([300, 100, 200]),
+    }
+    result_df = calculate_windowed_isi(
+        data_export,
+        window_start=0.0,
+        window_end=1.0,
+        time_bin=0.1,
+        max_isi_time=0.5,
+    )
+
+    assert result_df["Cluster_0"].sum() == 2
+
+
+def test_calculate_windowed_isi_invalid_window():
+    data_export = {0: np.array([100, 200, 300])}
+    import pytest
+
+    with pytest.raises(ValueError):
+        calculate_windowed_isi(
+            data_export,
+            window_start=1.0,
+            window_end=0.0,
+            time_bin=0.1,
+            max_isi_time=0.5,
+        )
+
+
 def test_calculate_isi_histogram_with_baseline():
     # Create synthetic data_export dictionary:
     data_export = {
@@ -71,6 +132,34 @@ def test_calculate_isi_histogram_with_baseline():
     assert set(baseline_isi_df.columns) == expected_baseline_columns
 
 
+def test_calculate_isi_histogram_invalid_baseline_range():
+    data_export = {0: np.array([100, 200, 300])}
+    import pytest
+
+    with pytest.raises(ValueError):
+        calculate_isi_histogram(
+            data_export,
+            baseline_start=0.5,
+            baseline_end=0.1,
+            time_bin=0.1,
+            max_isi_time=0.5,
+        )
+
+
+def test_calculate_isi_histogram_non_monotonic_sorts():
+    data_export = {0: np.array([400, 100, 300, 200])}
+    isi_df, baseline_isi_df = calculate_isi_histogram(
+        data_export,
+        baseline_start=None,
+        baseline_end=None,
+        time_bin=0.1,
+        max_isi_time=0.5,
+    )
+
+    # 100->200->300->400 has 3 ISIs, so histogram sum should be 3.
+    assert isi_df["Cluster_0"].sum() == 3
+
+
 # --- Test for compute_hazard_values --- #
 
 
@@ -94,6 +183,16 @@ def test_compute_hazard_values():
             assert hazard_df[col].dtype == float
 
 
+def test_compute_hazard_values_no_spikes():
+    bin_starts = np.array([0.0, 0.1, 0.2])
+    data = {
+        "Bin_Starts": bin_starts,
+        "Cluster_0": np.array([0, 0, 0]),
+    }
+    hazard_df = compute_hazard_values(pd.DataFrame(data), bin_starts)
+    assert (hazard_df["Cluster_0"] == 0.0).all()
+
+
 # --- Test for compute_hazard_summary --- #
 
 
@@ -113,7 +212,8 @@ def test_compute_hazard_summary():
         hazard_df, bin_starts, early_time, late_time_start, late_time_end
     )
     # Check that summary_df contains a row for "Cluster_0" and has the expected columns.
-    expected_cols = {"Cluster", "Peak Early Hazard", "Mean Late Hazard", "Hazard Ratio"}
+    expected_cols = {"Cluster", "Peak Early Hazard",
+                     "Mean Late Hazard", "Hazard Ratio"}
     assert set(summary_df.columns) == expected_cols
     # Ensure the "Cluster" column contains "Cluster_0".
     assert "Cluster_0" in summary_df["Cluster"].values

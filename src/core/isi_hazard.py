@@ -2,6 +2,19 @@ import numpy as np
 import pandas as pd
 
 
+def _assert_monotonic_nonnegative(spikes_sec: np.ndarray, *, cluster_id: int | str) -> np.ndarray:
+    """Ensure spike times are non-negative and sorted in ascending order."""
+    if spikes_sec.size == 0:
+        return spikes_sec
+    if np.any(spikes_sec < 0):
+        raise ValueError(
+            f"Spike times for cluster {cluster_id} must be non-negative")
+    if not np.all(np.diff(spikes_sec) >= 0):
+        # Make deterministic for analysis functions
+        return np.sort(spikes_sec)
+    return spikes_sec
+
+
 def calculate_windowed_isi(
     data_export: dict[int, np.ndarray],
     window_start: float,
@@ -15,16 +28,22 @@ def calculate_windowed_isi(
 
     col_suffix is appended to each cluster column name (e.g. '_Pre', '_Post').
     """
+    if window_start > window_end:
+        raise ValueError("window_start must be <= window_end")
+
     n_bins = int(max_isi_time / time_bin)
     bin_edges = np.arange(0, (n_bins + 1) * time_bin, time_bin)
     data: dict[str, np.ndarray] = {"Bin_Starts": bin_edges[:-1]}
+
     for cid, spikes_ms in data_export.items():
-        spikes_s = spikes_ms / 1000.0
+        spikes_s = _assert_monotonic_nonnegative(
+            spikes_ms / 1000.0, cluster_id=cid)
         windowed = spikes_s[(spikes_s >= window_start)
                             & (spikes_s <= window_end)]
         isis = np.diff(windowed)
         hist, _ = np.histogram(isis, bins=bin_edges)
         data[f"Cluster_{cid}{col_suffix}"] = hist
+
     return pd.DataFrame(data)
 
 
@@ -41,6 +60,12 @@ def calculate_isi_histogram(
     If baseline_start and baseline_end are provided, also returns a baseline ISI DataFrame
     with columns named Cluster_N_Baseline.
     """
+    if (baseline_start is None) != (baseline_end is None):
+        raise ValueError(
+            "baseline_start and baseline_end must be provided together")
+    if baseline_start is not None and baseline_start > baseline_end:
+        raise ValueError("baseline_start must be <= baseline_end")
+
     baseline_data: dict[int, np.ndarray] | None = (
         {} if baseline_start is not None and baseline_end is not None else None
     )
@@ -50,7 +75,8 @@ def calculate_isi_histogram(
     isi_data: dict[str, np.ndarray] = {"Bin_Starts": bin_edges[:-1]}
 
     for channel, spikes in data_export.items():
-        spikes_sec = spikes / 1000.0
+        spikes_sec = _assert_monotonic_nonnegative(
+            spikes / 1000.0, cluster_id=channel)
         isis = np.diff(spikes_sec)
         hist, _ = np.histogram(isis, bins=bin_edges)
         isi_data[channel] = hist  # type: ignore[index]
