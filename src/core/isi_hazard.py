@@ -63,7 +63,7 @@ def calculate_isi_histogram(
     if (baseline_start is None) != (baseline_end is None):
         raise ValueError(
             "baseline_start and baseline_end must be provided together")
-    if baseline_start is not None and baseline_start > baseline_end:
+    if baseline_start is not None and baseline_end is not None and baseline_start > baseline_end:
         raise ValueError("baseline_start must be <= baseline_end")
 
     baseline_data: dict[int, np.ndarray] | None = (
