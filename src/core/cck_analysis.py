@@ -112,8 +112,20 @@ def _analyse_cell_type_protocol(
         row["Delta_FR_Hz"] = round(delta, 4)
         row["Baseline_Slope_Hz_per_min"] = round(slope, 4)
         row["R_squared"] = round(r2, 4) if not np.isnan(r2) else float("nan")
-        row["Classification"] = classify_fn(delta)
-        row["Notes"] = _stability_note(slope, stability_threshold)
+
+        zero_pre = pre_mean == 0.0
+        zero_post = post_mean == 0.0
+        if zero_pre and zero_post:
+            row["Classification"] = "Unclassifiable (Zero FR)"
+            row["Notes"] = "⚠ Zero firing rate in both pre and post windows"
+        else:
+            row["Classification"] = classify_fn(delta)
+            stability = _stability_note(slope, stability_threshold)
+            if zero_pre and not zero_post:
+                note = "⚠ Zero pre-window FR; classification may be unreliable"
+                row["Notes"] = f"{note}; {stability}" if stability else note
+            else:
+                row["Notes"] = stability
 
         rows.append(row)
 

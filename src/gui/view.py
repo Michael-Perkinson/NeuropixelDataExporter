@@ -134,7 +134,7 @@ class MainWindow(QMainWindow):  # type: ignore[misc]
 
         self.start_time_input = QLineEdit(placeholderText="0 s")
         self.end_time_input = QLineEdit(placeholderText="max")
-        self.bin_size_input = QLineEdit(placeholderText="60 s")
+        self.bin_size_input = QLineEdit(placeholderText="600 s")
         self.start_time_input.setFixedWidth(70)
         self.end_time_input.setFixedWidth(70)
         self.bin_size_input.setFixedWidth(70)
@@ -178,11 +178,10 @@ class MainWindow(QMainWindow):  # type: ignore[misc]
             "pre-drug and gives a stable reference hazard shape.\n\n"
             "Only used when 'Binned ISI & Hazard' is checked."
         )
-        isi_label.setStyleSheet("font-size: 8pt; color: #4a4a6a;")
         self.isi_hazard_start_input = QLineEdit(placeholderText="0 s")
         self.isi_hazard_end_input = QLineEdit(placeholderText="600 s")
-        self.isi_hazard_start_input.setFixedWidth(55)
-        self.isi_hazard_end_input.setFixedWidth(55)
+        self.isi_hazard_start_input.setFixedWidth(70)
+        self.isi_hazard_end_input.setFixedWidth(70)
         self.isi_hazard_start_input.setToolTip(
             "Start of the ISI/hazard reference window (seconds).\nDefault: 0"
         )
@@ -342,7 +341,7 @@ class MainWindow(QMainWindow):  # type: ignore[misc]
         return col
 
     def _create_drug_input_group(self) -> QGroupBox:
-        self.drug_name_input = QLineEdit(placeholderText="e.g. Oxytocin")
+        self.drug_name_input = QLineEdit(placeholderText="e.g. Alpha-MSH")
         self.drug_route_combo = QComboBox()
         self.drug_route_combo.addItems(["Microdialysis", "IV"])
         self.drug_route_combo.setFixedWidth(120)
@@ -352,7 +351,7 @@ class MainWindow(QMainWindow):  # type: ignore[misc]
             "Leave blank for an acute injection (single time point).\n"
             "Enter a time in seconds for a continuous event, or 'max' to use the recording end."
         )
-        self.peri_drug_input = QLineEdit(placeholderText="e.g. 60 or 30/90")
+        self.peri_drug_input = QLineEdit(placeholderText="e.g. 600 or 300/900")
 
         self.drug_start_input.setFixedWidth(70)
         self.drug_end_input.setFixedWidth(110)
@@ -366,8 +365,8 @@ class MainWindow(QMainWindow):  # type: ignore[misc]
             "Used for plot shading AND for exporting a\n"
             "dedicated peri-drug firing rate sheet\n"
             "(if 'Peri-drug Sheets' is checked in Output Options).\n\n"
-            "  60    → 60 s before and after\n"
-            "  30/90 → 30 s pre, 90 s post"
+            "  600    → 600 s before and after\n"
+            "  300/900 → 300 s pre, 900 s post"
         ))
         peri_widget = QWidget()
         peri_widget.setLayout(peri_row)
@@ -463,10 +462,11 @@ class MainWindow(QMainWindow):  # type: ignore[misc]
     # ── Event handlers ───────────────────────────────────────────────────────
 
     def _select_folder(self) -> None:
-        path = file_chooser(self)
+        path = file_chooser(self, start_dir=self.controller.last_browse_dir)
         self.folder_input.setText(str(path) if path else "")
         if not path:
             return
+        self.controller.last_browse_dir = path
 
         found_files = find_specific_files_in_folder(
             path, KS_REQUIRED, KS_LABEL_FILES)

@@ -51,17 +51,17 @@ Both protocols export a dedicated sheet with Pre_Mean_FR_Hz, Post_Mean_FR_Hz, De
 ### ISI Histogram & Hazard Function
 - Full-recording ISI histogram and hazard function
 - Configurable early-recording reference window (default 0–600 s, "ISI Hazard Window" in the Analysis section) — useful as a pre-drug reference when the exact drug times vary
-- Optional peri-drug hazard: for each drug with a peri window, pre and post epoch ISI histograms and hazard functions are computed and written side-by-side for direct comparison
+- Optional peri-drug hazard: for each drug, computes ISI histograms and hazard functions for one bin immediately before drug onset (PreDrug) and one bin at the end of drug application (EndDrug); each epoch is written to its own sheet
 - All hazard output goes to a single `isi_and_hazard_analysis.xlsx` file
 
 ### Output Options (all toggleable)
 | Checkbox | What it produces |
 |---|---|
 | Binned ISI & Hazard | `isi_and_hazard_analysis.xlsx` with full and early-window sheets |
-| Peri-drug Hazard | Adds `Peri_<Drug>_ISI` and `Peri_<Drug>_Hazard` sheets per drug |
+| Peri-drug Hazard | Adds `<Drug>_PreDrug_ISI/Hazard` and `<Drug>_EndDrug_ISI/Hazard` sheets per drug |
 | Export TXT (Clampfit) | `.txt` files in `txt_files_for_clampfit_import/` |
 | Export All Graphs | Interactive HTML plots in `firing_rate_images/` |
-| Mean by Label | `Mean_by_Label` sheet + `MeanPeri_<Drug>` peri sheets averaged by group |
+| Mean by Label | `Mean_by_Label` sheet + `Mean_by_Label_Peri` sheet with all drugs combined |
 | Peri-drug Sheets | `Peri_<Drug>` firing rate sheets time-aligned to each drug onset |
 
 ### Interactive Plots
@@ -186,16 +186,19 @@ All output is saved to a timestamped folder inside your data folder.
 | Sheet | Contents |
 |---|---|
 | **Summary** | Recording parameters, protocol details, neuron counts (total / putative OT / putative VP per protocol), peri-drug window ranges, any clipping warnings |
-| **Delta_from_Baseline** | Per-cluster firing rate change from baseline (if FR Baseline enabled) |
-| **Baseline_Stats** | Mean and SD of firing rate across the baseline window |
-| **CCK_Cell_Typing** | Pre_Mean_FR_Hz, Post_Mean_FR_Hz, Delta_FR_Hz, Classification, Baseline_Stability |
+| **Sheet_Guide** | First sheet — plain-English description of every tab, what it contains and the time window it covers |
+| **CCK_Cell_Typing** | Pre/Post mean FR, delta, Classification (`Putative Oxytocin` / `Putative Vasopressin` / `Unclassifiable (Zero FR)`), Notes (baseline stability direction, zero pre-FR flag) |
 | **PE_Cell_Typing** | Same format as CCK_Cell_Typing |
+| **Baseline_Mean_and_SD (Xs–Ys)** | Mean and SD of firing rate across the baseline window (if FR Baseline enabled); mean is used to compute delta sheets |
 | **Peri_\<Drug\>** | Binned firing rates over the peri-drug window, t=0 at drug onset |
-| **MeanPeri_\<Drug\>** | As above but averaged by Phy group label (if Mean by Label enabled) |
+| **Peri_\<Drug\>\_Delta** | Per-cluster firing rate change from baseline over the peri-drug window (if FR Baseline enabled) |
+| **Mean_by_Label_Peri** | All peri-drug windows combined into one sheet, averaged by Phy group label, each drug separated by a header row (if Mean by Label enabled) |
 | **Mean_by_Label** | Firing rates averaged per label group across the full recording window |
-| **Binned_Firing_Rates** | Raw per-cluster firing rates across the full recording window (always last) |
+| **Binned_Firing_Rates** | Binned per-cluster firing rates across the full recording window (always last) |
 
 ### `isi_and_hazard_analysis.xlsx`
+
+Cluster columns are labelled with putative cell-type where classification has been run (e.g. `Cluster_1 (Putative Oxytocin)`), matching the firing rate sheets.
 
 | Sheet | Contents |
 |---|---|
@@ -205,8 +208,13 @@ All output is saved to a timestamped folder inside your data folder.
 | **Early_ISI (X–Ys)** | ISI histogram for the configured early window (default 0–600 s) |
 | **Early_Hazard (X–Ys)** | Hazard function for the early window |
 | **Early_Hazard_Summary** | Summary metrics for the early window |
-| **Peri_\<Drug\>_ISI** | Combined pre (\_Pre) and post (\_Post) ISI columns per cluster |
-| **Peri_\<Drug\>_Hazard** | Combined pre and post hazard columns per cluster |
+| **Summary** | Guide sheet listing every sheet, its section, and the time window it covers |
+| **\<Drug\>\_PreDrug\_ISI** | ISI histogram for the 1-bin window immediately before drug onset (\_PreDrug suffix) |
+| **\<Drug\>\_PreDrug\_Hazard** | Hazard function for the pre-drug bin |
+| **\<Drug\>\_PreDrug\_HazSumm** | Hazard summary metrics for the pre-drug bin |
+| **\<Drug\>\_EndDrug\_ISI** | ISI histogram for the 1-bin window at end of drug application (only when drug has an end time) |
+| **\<Drug\>\_EndDrug\_Hazard** | Hazard function for the end-drug bin |
+| **\<Drug\>\_EndDrug\_HazSumm** | Hazard summary metrics for the end-drug bin |
 
 ### `spike_times_by_cluster_time_ms.csv`
 Raw spike times in milliseconds for each selected cluster.

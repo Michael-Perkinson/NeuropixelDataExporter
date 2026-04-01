@@ -13,7 +13,7 @@ from src.core.firing_rate import process_cluster_data
 from src.core.input_parser import parse_channels_or_labels, validate_and_parse_drug_event
 from src.core.interactive_plot import export_firing_rate_html
 from src.core.isi_hazard import calculate_hazard_function, calculate_isi_histogram, calculate_windowed_isi
-from src.core.results_writer import export_data, export_hazard_excel
+from src.core.results_writer import _cluster_label_map, export_data, export_hazard_excel
 from src.gui.gui_themes import _dark_theme, _light_theme
 from src.gui.view import MainWindow
 
@@ -165,33 +165,49 @@ class AnalysisWorker(QThread):
                 early_isi_df)
             early_label = f"{self.early_hazard_start:.0f}–{early_end:.0f}s"
 
-            # Per-drug pre/post hazard epochs
+            # Per-drug pre/post hazard epochs (1 bin before onset; 1 bin at end of drug)
             peri_epochs: list[dict] = []
             if self.peri_hazard:
                 for ev in self.active_drug_events:
                     onset = float(ev["start"])
-                    pre_start = ev.get("pre_time")
-                    post_end_raw = ev.get("post_time")
-                    if pre_start is None and post_end_raw is None:
-                        continue
-                    pre_start_f = float(pre_start) if pre_start is not None else onset
-                    post_end_f = min(
-                        float(post_end_raw) if post_end_raw is not None else onset,
-                        self.end_time,
-                    )
+                    drug_end_raw = ev.get("end")
+
+                    # 1 bin immediately before onset
+                    pre_win_start = max(0.0, onset - self.bin_size)
+                    pre_win_end = onset
+
                     pre_isi = calculate_windowed_isi(
-                        raw_fr_dict, pre_start_f, onset, col_suffix="_Pre")
-                    post_isi = calculate_windowed_isi(
-                        raw_fr_dict, onset, post_end_f, col_suffix="_Post")
-                    pre_haz, _, _, _ = calculate_hazard_function(pre_isi)
-                    post_haz, _, _, _ = calculate_hazard_function(post_isi)
-                    peri_epochs.append({
+                        raw_fr_dict, pre_win_start, pre_win_end, col_suffix="_PreDrug")
+                    pre_haz, pre_haz_summary, _, _ = calculate_hazard_function(pre_isi)
+
+                    epoch: dict[str, Any] = {
                         "name": ev["name"],
+                        "pre_win_start": pre_win_start,
+                        "pre_win_end": pre_win_end,
                         "pre_isi_df": pre_isi,
                         "pre_hazard_df": pre_haz,
-                        "post_isi_df": post_isi,
-                        "post_hazard_df": post_haz,
-                    })
+                        "pre_hazard_summary_df": pre_haz_summary,
+                    }
+
+                    # 1 bin at the end of drug application (only if drug has an end time)
+                    if drug_end_raw is not None:
+                        import math as _math
+                        drug_end_f = self.end_time if _math.isinf(float(drug_end_raw)) else float(drug_end_raw)
+                        drug_end_f = min(drug_end_f, self.end_time)
+                        end_win_start = max(0.0, drug_end_f - self.bin_size)
+                        end_win_end = drug_end_f
+
+                        end_isi = calculate_windowed_isi(
+                            raw_fr_dict, end_win_start, end_win_end, col_suffix="_EndDrug")
+                        end_haz, end_haz_summary, _, _ = calculate_hazard_function(end_isi)
+
+                        epoch["end_win_start"] = end_win_start
+                        epoch["end_win_end"] = end_win_end
+                        epoch["end_isi_df"] = end_isi
+                        epoch["end_hazard_df"] = end_haz
+                        epoch["end_hazard_summary_df"] = end_haz_summary
+
+                    peri_epochs.append(epoch)
 
             log("Exporting hazard Excel output...")
             export_hazard_excel(
@@ -204,6 +220,7 @@ class AnalysisWorker(QThread):
                 early_hazard_summary_df=early_hazard_summary_df,
                 early_hazard_label=early_label,
                 peri_epochs=peri_epochs,
+                label_map=_cluster_label_map(cck_df, pe_df),
             )
         else:
             log("Skipping hazard export (disabled).")
@@ -247,6 +264,7 @@ TEMP_SETTINGS_PATH: Path = _get_base_dir() / ".neuropixel_gui_last_session.json"
 class GUIController:
     def __init__(self) -> None:
         self.view: MainWindow | None = None
+        self.last_browse_dir: Path | None = None
 
     def set_view(self, main_window: MainWindow) -> None:
         self.view = main_window
@@ -254,7 +272,7 @@ class GUIController:
     def _collect_settings(self) -> dict[str, Any]:
         view = self.view
         assert view is not None
-        return {
+        settings: dict[str, Any] = {
             "optional_outputs": {
                 "export_txt": view.txt_export_checkbox.isChecked(),
                 "export_all_graphs": view.all_graphs_checkbox.isChecked(),
@@ -264,6 +282,9 @@ class GUIController:
             },
             "theme": "dark" if view.dark_mode else "light",
         }
+        if self.last_browse_dir is not None:
+            settings["last_browse_dir"] = str(self.last_browse_dir)
+        return settings
 
     def export_user_settings(self, parent: QWidget | None) -> None:
         if self.view is None:
@@ -362,6 +383,12 @@ class GUIController:
                 view.setStyleSheet(_light_theme())
                 view.dark_mode = False
 
+            raw_dir = settings.get("last_browse_dir")
+            if raw_dir:
+                p = Path(raw_dir)
+                if p.exists():
+                    self.last_browse_dir = p
+
         except Exception as e:
             print(f"[Warning] Could not load temp settings: {e}")
 
@@ -452,11 +479,30 @@ class GUIController:
 
         try:
             start_time = _parse_float(start, default=0.0) or 0.0
-            bin_size_val = _parse_float(bin_size, default=60.0) or 60.0
+            bin_size_val = _parse_float(bin_size, default=600.0) or 600.0
             baseline_start_val = _parse_float(baseline_start, default=None)
             baseline_end_val = _parse_float(baseline_end, default=None)
         except ValueError as e:
             log.append(f"Invalid input: {e}")
+            return
+
+        # CCK/PE window feasibility checks (before launching the worker)
+        if cck_time is not None and (cck_time - 300.0) < start_time:
+            needed = start_time + 300.0
+            log.append(
+                f"⚠ CCK time ({cck_time:.1f}s) is less than 5 minutes after the "
+                f"analysis start ({start_time:.1f}s). The CCK protocol requires a full "
+                f"5-minute pre-window. Please enter a CCK time ≥ {needed:.1f}s."
+            )
+            return
+
+        if pe_time is not None and (pe_time - 60.0) < start_time:
+            needed = start_time + 60.0
+            log.append(
+                f"⚠ PE time ({pe_time:.1f}s) is less than 1 minute after the "
+                f"analysis start ({start_time:.1f}s). The PE protocol requires a full "
+                f"1-minute pre-window. Please enter a PE time ≥ {needed:.1f}s."
+            )
             return
 
         # end_time resolved after data load in the worker; pass raw string

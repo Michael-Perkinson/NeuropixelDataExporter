@@ -1,5 +1,62 @@
 # Changelog
 
+## [2.0.4] - 2026-04-01
+
+- **`Sheet_Guide` is now the first sheet** in `firing_rates_by_cluster.xlsx` (previously second); Summary moves to second.
+- **CCK/PE pre-window feasibility check**: if the CCK injection time is less than 5 minutes after the analysis start, or PE is less than 1 minute after the analysis start, analysis is blocked with a clear error message asking for a valid time. The protocol cannot compute a full pre-window without sufficient recording before the injection.
+- **Bin truncation warnings** in the Summary sheet: if a recording window or peri-drug window is not a whole multiple of the bin size, a warning is logged stating how many full bins were used and how many seconds at the end were not included (e.g. "last 400.0s (3600.0s–4000.0s) not included"). Applies to the main recording window and each peri-drug window.
+- **`Unclassifiable (Zero FR)` classification** for CCK/PE: clusters with zero mean firing rate in both the pre and post windows are now labelled `Unclassifiable (Zero FR)` rather than being misclassified. A note is added to the Notes column.
+- **Zero pre-window FR flag**: clusters with zero FR before injection but non-zero after are still classified (e.g. Putative Oxytocin for CCK) but flagged in Notes: `⚠ Zero pre-window FR; classification may be unreliable`.
+- **Bilateral baseline stability flag**: the existing `⚠ Rising baseline` / `⚠ Falling baseline` note already used `abs()` on the slope — confirmed correct for both rising and falling trends.
+
+---
+
+## [2.0.3] - 2026-04-01
+
+### Added
+
+- **`Sheet_Guide` sheet** added to `firing_rates_by_cluster.xlsx` — always the second sheet (after Summary). Lists every sheet with its Section, Sheet name, and a plain-English description of what the sheet contains and the time window it covers. Mirrors the Summary guide sheet already present in `isi_and_hazard_analysis.xlsx`.
+- **Section deduplication** in Summary and Sheet_Guide sheets (both workbooks): the Section column now shows each section name only on its first row; subsequent rows in the same section are blank, making the table much easier to scan.
+
+---
+
+## [2.0.2] - 2026-04-01
+
+### Changed
+
+#### Firing Rate Sheet Restructure (`firing_rates_by_cluster.xlsx`)
+
+- **Sheet order**: Summary → CCK_Cell_Typing → PE_Cell_Typing → Baseline_Mean_and_SD → Peri_\<Drug\> → Peri_\<Drug\>\_Delta → Mean_by_Label_Peri → Binned_Firing_Rates
+- **Renamed**: `Baseline_Stats` → `Baseline_Mean_and_SD (Xs–Ys)` — clarifies that the sheet contains mean and SD values (the mean is what is used to compute deltas)
+- **Removed**: standalone `Delta_from_Baseline` sheet — delta data is now in the peri-drug sheets rather than a separate standalone sheet
+- **New `Peri_<Drug>_Delta` sheets**: when FR Baseline is ticked, each drug with a peri window gets a matching delta sheet showing firing rate change from baseline, time-aligned to drug onset
+- **Replaced per-drug `MeanPeri_<Drug>` sheets with a single `Mean_by_Label_Peri` sheet**: all peri-drug mean-by-label data combined into one sheet with drug-name header rows as separators; each drug block is time-aligned to its own onset
+
+#### Hazard Epoch Redesign (`isi_and_hazard_analysis.xlsx`)
+
+- **Peri-drug hazard epochs now use 1-bin windows** instead of the full peri window: one bin immediately before drug onset (`PreDrug`) and one bin at the end of drug application (`EndDrug`), where bin width = the configured bin size
+- **Sheet naming changed** to reflect the epoch meaning: `<Drug>_PreDrug_ISI`, `<Drug>_PreDrug_Hazard`, `<Drug>_PreDrug_HazSumm`, and `<Drug>_EndDrug_ISI`, `<Drug>_EndDrug_Hazard`, `<Drug>_EndDrug_HazSumm` (EndDrug sheets only written when the drug has an end time)
+- **New Summary guide sheet** added as the first sheet of `isi_and_hazard_analysis.xlsx` — lists every sheet with its Section, Sheet name, and a plain-English description of the time window it covers
+
+#### Other
+
+- **Bin size default corrected**: fallback default was 60 s; now correctly defaults to 600 s to match the placeholder shown in the GUI
+
+---
+
+## [2.0.1] - 2026-04-01
+
+### Fixed (2.0.1)
+
+- ISI and hazard Excel sheets now include putative cell-type labels in cluster column names (e.g. `Cluster_1 (Putative Oxytocin)`) — consistent with the firing rate sheets. Applies to all sheets in `isi_and_hazard_analysis.xlsx`: Full_ISI, Full_Hazard, Full_Hazard_Summary, Early_ISI, Early_Hazard, Early_Hazard_Summary, and all Peri_\<Drug\> ISI/hazard sheets.
+- ISI Hazard Window label in the GUI now matches the style of the FR Baseline row (same font size, colour, and input width).
+
+### Changed (2.0.1)
+
+- The folder browser now reopens in the last browsed directory. The path is saved to the session file on Run Analysis and restored on next launch. Falls back to the home directory if no session exists or the path no longer exists.
+
+---
+
 ## [2.0.0] - 2026-03-31
 
 This release is a complete rewrite of the tool. The original monolithic terminal script (`export_clusters.py`) has been replaced by a PySide6 desktop application with a fully graphical interface, background threading, multi-drug support, cell-type classification, and a restructured multi-sheet Excel output.
@@ -77,7 +134,7 @@ This release is a complete rewrite of the tool. The original monolithic terminal
 
 - Named drug events with: name, route (Microdialysis / IV), start time (s), optional end time (s)
 - End time field accepts `max` to indicate the drug runs to the end of the recording
-- Optional peri-drug window per event, entered as a single value (`60` = symmetric) or `pre/post` pair (`300/60`)
+- Optional peri-drug window per event, entered as a single value (`600` = symmetric) or `pre/post` pair (`300/600`)
 - Multiple drugs supported simultaneously in a scrollable table
 - Right-click a table row to remove it
 

@@ -170,7 +170,11 @@ def _build_summary_sheet(
     for warning in peri_warnings:
         _add("Warnings", "⚠", warning)
 
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    # Show each section name only on its first row — cleaner to read
+    df["Section"] = df["Section"].where(
+        df["Section"] != df["Section"].shift(), "")
+    return df
 
 
 def _build_peri_sheet(
@@ -268,11 +272,12 @@ def export_data(
 
     Sheet order in the xlsx:
       1. Summary
-      2. Delta_from_Baseline (if used)
-      3. Baseline_Stats (if used)
-      4. CCK_Cell_Typing (if CCK used)
-      5. PE_Cell_Typing (if PE used)
-      6. Peri_<DrugName> (one per drug event with a peri window)
+      2. CCK_Cell_Typing (if CCK used)
+      3. PE_Cell_Typing (if PE used)
+      4. Baseline_Mean_and_SD (if baseline used)
+      5. Peri_<Drug> (one per drug event with a peri window)
+      5b. Peri_<Drug>_Delta (if baseline used)
+      6. Mean_by_Label_Peri (all drugs combined, if mean_label_data)
       7. Binned_Firing_Rates  ← always last
 
     Returns:
@@ -299,38 +304,49 @@ def export_data(
     if not export_firing_rate_xlsx:
         return export_dir, images_dir, None
 
-    raw_data, delta_data = calculate_firing_rate(
+    raw_data, _ = calculate_firing_rate(
         filtered_export,
         bin_size,
         start_time,
         end_time,
-        baseline_fr_dict if export_delta_from_baseline else None,
+        None,
     )
-    df_raw, df_delta = create_firing_rate_dataframes(raw_data, delta_data)
+    df_raw, _ = create_firing_rate_dataframes(raw_data, None)
 
     if df_raw.empty:
         return export_dir, images_dir, None
 
     label_map = _cluster_label_map(cck_df, pe_df)
+    has_baseline = (
+        export_delta_from_baseline
+        and baseline_fr_dict is not None
+        and baseline_start is not None
+        and baseline_end is not None
+    )
     peri_warnings: list[str] = []
+
+    def _bin_truncation_warning(label: str, win_start: float, win_end: float) -> str | None:
+        """Return a warning string if the window is not a whole multiple of bin_size."""
+        duration = win_end - win_start
+        remainder = duration % bin_size
+        if remainder < 1e-6:
+            return None
+        n_full = int(duration // bin_size)
+        last_bin_end = win_start + n_full * bin_size
+        return (
+            f"{label}: window {win_start:.1f}s–{win_end:.1f}s ({duration:.1f}s) "
+            f"is not a whole multiple of bin size ({bin_size:.1f}s). "
+            f"{n_full} full bin(s) used; last {remainder:.1f}s ({last_bin_end:.1f}s–{win_end:.1f}s) not included."
+        )
+
+    main_trunc_warn = _bin_truncation_warning("Main recording", start_time, end_time)
+    if main_trunc_warn:
+        peri_warnings.append(main_trunc_warn)
 
     xlsx_path = export_dir / "firing_rates_by_cluster.xlsx"
     with ExcelWriter(xlsx_path, engine="xlsxwriter") as writer:
 
-        # Summary is deferred so peri-drug warnings can be collected first
-
-        if export_delta_from_baseline and df_delta is not None and len(df_delta.columns) > 1:
-            df_delta_renamed = _rename_cluster_columns(df_delta, label_map)
-            df_delta_renamed.to_excel(
-                writer, sheet_name="Delta_from_Baseline", index=False)
-
-        if export_baseline_stats and baseline_start is not None and baseline_end is not None:
-            baselined_df = create_baselined_df(
-                baseline_start, baseline_end, bin_size, filtered_export)
-            baseline_sheet = f"Baseline_Stats ({baseline_start:.0f}s-{baseline_end:.0f}s)"
-            baselined_df.to_excel(
-                writer, sheet_name=baseline_sheet, index=False)
-
+        # CCK / PE cell typing
         if cck_df is not None and not cck_df.empty:
             _trim_cell_typing_df(cck_df).to_excel(
                 writer, sheet_name="CCK_Cell_Typing", index=False)
@@ -338,6 +354,18 @@ def export_data(
         if pe_df is not None and not pe_df.empty:
             _trim_cell_typing_df(pe_df).to_excel(
                 writer, sheet_name="PE_Cell_Typing", index=False)
+
+        # Baseline mean and SD
+        if export_baseline_stats and baseline_start is not None and baseline_end is not None:
+            baselined_df = create_baselined_df(
+                baseline_start, baseline_end, bin_size, filtered_export)
+            baseline_sheet = f"Baseline_Mean_and_SD ({baseline_start:.0f}s-{baseline_end:.0f}s)"
+            baselined_df.to_excel(
+                writer, sheet_name=baseline_sheet[:31], index=False)
+
+        # Peri-drug sheets (raw + optional delta)
+        # Accumulated per-drug means for the combined sheet
+        all_drug_means: list[tuple[str, pd.DataFrame]] = []
 
         for ev in (drug_events or []):
             pre_abs = ev.get("pre_time")
@@ -358,11 +386,33 @@ def export_data(
             if warning:
                 peri_warnings.append(f"{ev['name']}: {warning}")
 
-            safe_name = ev["name"].replace(" ", "_")[:24]
+            trunc = _bin_truncation_warning(ev["name"], pre_abs_f, min(post_abs_f, end_time))
+            if trunc:
+                peri_warnings.append(trunc)
+
+            safe_name = ev["name"].replace(" ", "_")[:20]
             peri_df.to_excel(writer, sheet_name=f"Peri_{safe_name}"[
                              :31], index=False)
 
-            # Peri mean-by-label sheet (if requested)
+            # Delta-from-baseline peri sheet
+            if has_baseline and baseline_fr_dict is not None:
+                clipped_end = min(post_abs_f, end_time)
+                peri_raw_data, peri_delta_data = calculate_firing_rate(
+                    filtered_export, bin_size, pre_abs_f, clipped_end,
+                    baseline_fr_dict,
+                )
+                _, peri_delta_df = create_firing_rate_dataframes(
+                    peri_raw_data, peri_delta_data)
+                if peri_delta_df is not None and len(peri_delta_df.columns) > 1:
+                    peri_delta_df["Time Intervals (s)"] = (
+                        peri_delta_df["Time Intervals (s)"] - drug_onset
+                    ).round(4)
+                    peri_delta_df = _rename_cluster_columns(
+                        peri_delta_df, label_map)
+                    peri_delta_df.to_excel(
+                        writer, sheet_name=f"Peri_{safe_name}_Delta"[:31], index=False)
+
+            # Accumulate per-drug mean-by-label rows for combined sheet
             if cluster_group_map:
                 clipped_end = min(post_abs_f, end_time)
                 lbl_cid_groups: dict[str, list[int]] = {}
@@ -372,7 +422,7 @@ def export_data(
                 if lbl_cid_groups:
                     peri_raw_all, _ = calculate_firing_rate(
                         {cid: filtered_export[cid]
-                            for cid in cluster_group_map if cid in filtered_export},
+                         for cid in cluster_group_map if cid in filtered_export},
                         bin_size, pre_abs_f, clipped_end,
                     )
                     peri_raw_df, _ = create_firing_rate_dataframes(
@@ -381,17 +431,43 @@ def export_data(
                         peri_raw_df["Time Intervals (s)"] - drug_onset
                     ).round(4)
                     mean_peri = pd.DataFrame(
-                        {"Time Intervals (s)": peri_raw_df["Time Intervals (s)"]})
+                        {"Time (s, 0=onset)": peri_raw_df["Time Intervals (s)"]})
                     for lbl, cids in sorted(lbl_cid_groups.items()):
                         cols = [
-                            f"Cluster_{cid}" for cid in cids if f"Cluster_{cid}" in peri_raw_df.columns]
+                            f"Cluster_{cid}" for cid in cids
+                            if f"Cluster_{cid}" in peri_raw_df.columns]
                         if cols:
                             mean_peri[f"Mean_{lbl}_Hz"] = peri_raw_df[cols].mean(
                                 axis=1)
-                    mean_peri.to_excel(writer, sheet_name=f"MeanPeri_{safe_name}"[
-                                       :31], index=False)
+                    all_drug_means.append((ev["name"], mean_peri))
 
-        # Summary written last so warnings are included, then moved to sheet position 0
+        # Combined mean-by-label peri sheet (all drugs side by side)
+        if cluster_group_map and all_drug_means:
+            combined_parts: list[pd.DataFrame] = []
+            for drug_name, mean_df in all_drug_means:
+                header = pd.DataFrame(
+                    [[f"--- {drug_name} ---"] + [""]
+                        * (len(mean_df.columns) - 1)],
+                    columns=mean_df.columns,
+                )
+                combined_parts.extend(
+                    [header, mean_df, pd.DataFrame(columns=mean_df.columns)])
+            combined_means = pd.concat(combined_parts, ignore_index=True)
+            combined_means.to_excel(
+                writer, sheet_name="Mean_by_Label_Peri", index=False)
+
+        guide_df = _build_fr_guide_sheet(
+            start_time, end_time,
+            baseline_start, baseline_end,
+            cck_df is not None and not cck_df.empty,
+            pe_df is not None and not pe_df.empty,
+            has_baseline,
+            drug_events or [],
+            cluster_group_map is not None and bool(all_drug_means),
+        )
+        guide_df.to_excel(writer, sheet_name="Sheet_Guide", index=False)
+
+        # Summary written last so warnings are included, then moved to position 0
         summary_df = _build_summary_sheet(
             start_time, end_time, bin_size,
             baseline_start, baseline_end,
@@ -403,21 +479,10 @@ def export_data(
         )
         wb = writer.book
         summary_df.to_excel(writer, sheet_name="Summary", index=False)
-        wb.worksheets_objs.sort(
-            key=lambda ws: 0 if ws.name == "Summary" else 1)
 
-        if cluster_group_map:
-            label_groups: dict[str, list[str]] = {}
-            for cid, lbl in cluster_group_map.items():
-                col = f"Cluster_{cid}"
-                if col in df_raw.columns:
-                    label_groups.setdefault(lbl, []).append(col)
-            if label_groups:
-                mean_df = df_raw[["Time Intervals (s)"]].copy()
-                for lbl, cols in sorted(label_groups.items()):
-                    mean_df[f"Mean_{lbl}_Hz"] = df_raw[cols].mean(axis=1)
-                mean_df.to_excel(
-                    writer, sheet_name="Mean_by_Label", index=False)
+        wb.worksheets_objs.sort(
+            key=lambda ws: (0 if ws.name == "Sheet_Guide" else 1 if ws.name == "Summary" else 2)
+        )
 
         # Binned_Firing_Rates is always the last sheet
         df_raw_renamed = _rename_cluster_columns(df_raw, label_map)
@@ -425,6 +490,147 @@ def export_data(
             writer, sheet_name="Binned_Firing_Rates", index=False)
 
     return export_dir, images_dir, df_raw
+
+
+def _build_fr_guide_sheet(
+    start_time: float,
+    end_time: float,
+    baseline_start: float | None,
+    baseline_end: float | None,
+    has_cck: bool,
+    has_pe: bool,
+    has_baseline: bool,
+    drug_events: list[dict[str, Any]],
+    has_mean_label: bool,
+) -> pd.DataFrame:
+    """Build a Sheet_Guide tab describing every sheet in the firing-rate workbook."""
+    rows: list[dict[str, str]] = []
+
+    def _add(section: str, sheet: str, description: str) -> None:
+        rows.append({"Section": section, "Sheet": sheet,
+                    "Description": description})
+
+    _add("Overview", "Sheet_Guide",
+         "This sheet — plain-English description of every tab and what it contains (always first)")
+    _add("Overview", "Summary",
+         "Recording parameters, protocol details, neuron counts, drug event windows, and any clipping warnings")
+
+    if has_cck:
+        _add("Cell Typing", "CCK_Cell_Typing",
+             "CCK protocol: Pre/Post mean FR, delta, classification (Putative OT / VP), and baseline stability")
+    if has_pe:
+        _add("Cell Typing", "PE_Cell_Typing",
+             "PE protocol: Pre/Post mean FR, delta, classification (Putative OT / VP), and baseline stability")
+
+    if has_baseline and baseline_start is not None and baseline_end is not None:
+        lbl = f"{baseline_start:.0f}s–{baseline_end:.0f}s"
+        _add("Baseline", f"Baseline_Mean_and_SD ({lbl})",
+             f"Per-cluster mean and SD firing rate across the baseline window ({lbl}); mean used to compute delta sheets")
+
+    for ev in drug_events:
+        pre_abs = ev.get("pre_time")
+        post_abs = ev.get("post_time")
+        if pre_abs is None and post_abs is None:
+            continue
+        safe = ev["name"].replace(" ", "_")[:20]
+        onset = float(ev["start"])
+        pre_f = float(pre_abs) if pre_abs is not None else onset
+        post_f = float(post_abs) if post_abs is not None else onset
+        window = f"{pre_f:.0f}s–{min(post_f, end_time):.0f}s (t=0 at {onset:.0f}s)"
+        _add(f"Peri-Drug: {ev['name']}", f"Peri_{safe}",
+             f"Binned firing rates over the peri-drug window; {window}")
+        if has_baseline:
+            _add(f"Peri-Drug: {ev['name']}", f"Peri_{safe}_Delta",
+                 f"Change in firing rate from baseline over the same peri-drug window; {window}")
+
+    if has_mean_label:
+        _add("Mean by Label", "Mean_by_Label_Peri",
+             "All peri-drug windows combined; firing rates averaged by Phy group label; each drug block separated by a header row")
+        _add("Mean by Label", "Mean_by_Label",
+             "Full-recording firing rates averaged per Phy group label")
+
+    _add("Raw Data", "Binned_Firing_Rates",
+         f"Per-cluster binned firing rates across the full recording window ({start_time:.0f}s–{end_time:.0f}s); always the last sheet")
+
+    df = pd.DataFrame(rows, columns=["Section", "Sheet", "Description"])
+    df["Section"] = df["Section"].where(
+        df["Section"] != df["Section"].shift(), "")
+    return df
+
+
+def _build_hazard_summary_sheet(
+    early_hazard_label: str,
+    early_hazard_summary_df: pd.DataFrame | None,
+    peri_epochs: list[dict[str, Any]],
+) -> pd.DataFrame:
+    """Build a guide sheet describing every tab in the hazard workbook."""
+    rows: list[dict[str, str]] = []
+
+    def _add(section: str, sheet: str, description: str) -> None:
+        rows.append({"Section": section, "Sheet": sheet,
+                    "Description": description})
+
+    _add("Full Recording", "Full_ISI",
+         "ISI histogram counts across the entire recording")
+    _add("Full Recording", "Full_Hazard",
+         "Hazard function values across the entire recording")
+    _add("Full Recording", "Full_Hazard_Summary",
+         "Peak early hazard, mean late hazard, and hazard ratio per cluster — full recording")
+
+    lbl = early_hazard_label
+    _add("Early Window", f"Early_ISI ({lbl[:12]})",
+         f"ISI histogram for the early reference window ({lbl})")
+    _add("Early Window", f"Early_Hazard ({lbl[:12]})",
+         f"Hazard function for the early reference window ({lbl})")
+    _add("Early Window", "Early_Hazard_Summary",
+         f"Hazard summary metrics for the early reference window ({lbl})")
+
+    if early_hazard_summary_df is not None:
+        pass  # already described above
+
+    for epoch in peri_epochs:
+        name = epoch["name"]
+        safe = name.replace(" ", "_")[:14]
+        pre_s = epoch.get("pre_win_start", "?")
+        pre_e = epoch.get("pre_win_end", "?")
+        _add(
+            f"Drug: {name}",
+            f"{safe}_PreDrug_ISI",
+            f"ISI histogram — 1 bin immediately before {name} onset ({pre_s:.0f}–{pre_e:.0f}s)",
+        )
+        _add(
+            f"Drug: {name}",
+            f"{safe}_PreDrug_Hazard",
+            f"Hazard function — 1 bin before {name} onset ({pre_s:.0f}–{pre_e:.0f}s)",
+        )
+        _add(
+            f"Drug: {name}",
+            f"{safe}_PreDrug_HazSumm",
+            f"Hazard summary — pre-drug window ({pre_s:.0f}–{pre_e:.0f}s)",
+        )
+        if "end_isi_df" in epoch:
+            end_s = epoch.get("end_win_start", "?")
+            end_e = epoch.get("end_win_end", "?")
+            _add(
+                f"Drug: {name}",
+                f"{safe}_EndDrug_ISI",
+                f"ISI histogram — 1 bin at end of {name} application ({end_s:.0f}–{end_e:.0f}s)",
+            )
+            _add(
+                f"Drug: {name}",
+                f"{safe}_EndDrug_Hazard",
+                f"Hazard function — end-of-drug window ({end_s:.0f}–{end_e:.0f}s)",
+            )
+            _add(
+                f"Drug: {name}",
+                f"{safe}_EndDrug_HazSumm",
+                f"Hazard summary — end-of-drug window ({end_s:.0f}–{end_e:.0f}s)",
+            )
+
+    df = pd.DataFrame(rows)
+    df["Section"] = df["Section"].where(
+        df["Section"] != df["Section"].shift(), "")
+    return df
 
 
 def export_hazard_excel(
@@ -438,45 +644,75 @@ def export_hazard_excel(
     early_hazard_summary_df: pd.DataFrame | None = None,
     early_hazard_label: str = "Early",
     peri_epochs: list[dict[str, Any]] | None = None,
+    label_map: dict[str, str] | None = None,
 ) -> None:
     """
     Write ISI and hazard data to Excel.
 
     Sheets written:
+      Summary  — guide to all tabs
       Full_ISI / Full_Hazard / Full_Hazard_Summary  — whole recording
-      Early_ISI (<label>) / Early_Hazard / Early_Hazard_Summary  — early window if provided
-      Peri_<Drug>_ISI / Peri_<Drug>_Hazard  — per-drug pre+post combined, if provided
+      Early_ISI (<label>) / Early_Hazard / Early_Hazard_Summary  — early window
+      <Drug>_PreDrug_ISI / _Hazard / _HazSumm  — 1 bin before drug onset
+      <Drug>_EndDrug_ISI / _Hazard / _HazSumm  — 1 bin at end of drug (if applicable)
     """
+    lm = label_map or {}
+    epochs = peri_epochs or []
+
+    def _rename_summary(df: pd.DataFrame) -> pd.DataFrame:
+        """Remap values in the 'Cluster' column using label_map."""
+        if not lm or "Cluster" not in df.columns:
+            return df
+        df = df.copy()
+        df["Cluster"] = df["Cluster"].map(
+            lambda c: f"{c} ({lm[c]})" if c in lm else c
+        )
+        return df
+
     excel_path = export_dir / "isi_and_hazard_analysis.xlsx"
     with ExcelWriter(excel_path, engine="xlsxwriter") as writer:
-        isi_df.to_excel(writer, sheet_name="Full_ISI", index=False)
-        hazard_df.to_excel(writer, sheet_name="Full_Hazard", index=False)
-        hazard_summary_df.to_excel(
+
+        # Summary guide sheet (written first, stays first)
+        _build_hazard_summary_sheet(
+            early_hazard_label, early_hazard_summary_df, epochs
+        ).to_excel(writer, sheet_name="Summary", index=False)
+
+        _rename_cluster_columns(isi_df, lm).to_excel(
+            writer, sheet_name="Full_ISI", index=False)
+        _rename_cluster_columns(hazard_df, lm).to_excel(
+            writer, sheet_name="Full_Hazard", index=False)
+        _rename_summary(hazard_summary_df).to_excel(
             writer, sheet_name="Full_Hazard_Summary", index=False)
 
         if early_isi_df is not None:
             lbl = early_hazard_label[:12]
-            early_isi_df.to_excel(
+            _rename_cluster_columns(early_isi_df, lm).to_excel(
                 writer, sheet_name=f"Early_ISI ({lbl})"[:31], index=False)
         if early_hazard_df is not None:
             lbl = early_hazard_label[:12]
-            early_hazard_df.to_excel(
+            _rename_cluster_columns(early_hazard_df, lm).to_excel(
                 writer, sheet_name=f"Early_Hazard ({lbl})"[:31], index=False)
         if early_hazard_summary_df is not None:
-            early_hazard_summary_df.to_excel(
+            _rename_summary(early_hazard_summary_df).to_excel(
                 writer, sheet_name="Early_Hazard_Summary", index=False)
 
-        for epoch in (peri_epochs or []):
-            safe = epoch["name"].replace(" ", "_")[:16]
+        for epoch in epochs:
+            safe = epoch["name"].replace(" ", "_")[:14]
 
-            pre_isi: pd.DataFrame = epoch["pre_isi_df"]
-            post_isi: pd.DataFrame = epoch["post_isi_df"]
-            combined_isi = pre_isi.join(post_isi.drop("Bin_Starts", axis=1))
-            combined_isi.to_excel(
-                writer, sheet_name=f"Peri_{safe}_ISI"[:31], index=False)
+            # Pre-drug (1 bin before onset)
+            pre_isi = _rename_cluster_columns(epoch["pre_isi_df"], lm)
+            pre_isi.to_excel(
+                writer, sheet_name=f"{safe}_PreDrug_ISI"[:31], index=False)
+            _rename_cluster_columns(epoch["pre_hazard_df"], lm).to_excel(
+                writer, sheet_name=f"{safe}_PreDrug_Hazard"[:31], index=False)
+            _rename_summary(epoch["pre_hazard_summary_df"]).to_excel(
+                writer, sheet_name=f"{safe}_PreDrug_HazSumm"[:31], index=False)
 
-            pre_haz: pd.DataFrame = epoch["pre_hazard_df"]
-            post_haz: pd.DataFrame = epoch["post_hazard_df"]
-            combined_haz = pre_haz.join(post_haz.drop("Bin_Starts", axis=1))
-            combined_haz.to_excel(
-                writer, sheet_name=f"Peri_{safe}_Hazard"[:31], index=False)
+            # End-of-drug (1 bin at end of drug application)
+            if "end_isi_df" in epoch:
+                _rename_cluster_columns(epoch["end_isi_df"], lm).to_excel(
+                    writer, sheet_name=f"{safe}_EndDrug_ISI"[:31], index=False)
+                _rename_cluster_columns(epoch["end_hazard_df"], lm).to_excel(
+                    writer, sheet_name=f"{safe}_EndDrug_Hazard"[:31], index=False)
+                _rename_summary(epoch["end_hazard_summary_df"]).to_excel(
+                    writer, sheet_name=f"{safe}_EndDrug_HazSumm"[:31], index=False)

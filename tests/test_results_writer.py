@@ -127,8 +127,8 @@ def test_export_data_no_spikes(tmp_path):
     assert df_raw is None
 
 
-def test_export_data_summary_sheet_first(tmp_path):
-    """Summary should be the first sheet in the output xlsx."""
+def test_export_data_sheet_guide_first_summary_second(tmp_path):
+    """Sheet_Guide should be first, Summary second in the output xlsx."""
     export_data(
         data_export={0: np.array([100, 200, 300])},
         baseline_fr_dict=None,
@@ -142,7 +142,8 @@ def test_export_data_summary_sheet_first(tmp_path):
 
     xlsx_path = tmp_path / "analysis_results" / "firing_rates_by_cluster.xlsx"
     with pd.ExcelFile(xlsx_path) as xls:
-        assert xls.sheet_names[0] == "Summary"
+        assert xls.sheet_names[0] == "Sheet_Guide"
+        assert xls.sheet_names[1] == "Summary"
 
 
 def test_export_data_binned_firing_rates_last(tmp_path):
