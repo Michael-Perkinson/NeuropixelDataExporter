@@ -104,7 +104,8 @@ def validate_and_parse_drug_event(
             else:
                 pre_val = post_val = float(peri_drug)
         except Exception:
-            raise ValueError("Peri-drug time must be a number or pre/post pair (e.g. 60 or 30/90).")
+            raise ValueError(
+                "Peri-drug time must be a number or pre/post pair (e.g. 600 or 300/900).")
 
         result["start_offset"] = max(0.0, start - pre_val)
         result["end_offset"] = (
