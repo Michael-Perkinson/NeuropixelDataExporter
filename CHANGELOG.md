@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.5] - 2026-04-09
+
+- **Fixed crash when spike_clusters.npy contains IDs beyond the label file range**: Kilosort assigns IDs to all detected units including those never curated in Phy. If the highest cluster ID in the spike data exceeded the highest ID in the label TSV, an IndexError occurred during data loading. The label array is now sized to cover all IDs present in the spike data, with unlabelled clusters defaulting to `"unknown"`.
+- **`cluster_info.tsv` is now the primary label source**: this file (written by Phy) contains the most complete cluster information, including custom neurontype annotations. It is checked before `cluster_KSLabel.tsv` and `cluster_group.tsv`. If not found, the app falls back to those files and logs a note.
+- **Neurontype labels now supported for cluster selection**: custom labels entered in Phy's neurontype field (e.g. `PMNC`, `NMNC`) can now be typed directly into the Clusters field to select matching clusters. Previously only `good`, `mua`, and numeric IDs were usable.
+- **Label matching is now case-insensitive**: entering `pmnc`, `PMNC`, or `Good` all work correctly.
+- **Label count logged**: when loading data, the app logs how many clusters have a neurontype annotation.
+- **Warning when non-standard label used without cluster_info.tsv**: if a label that isn't `good`, `mua`, or `noise` is entered but `cluster_info.tsv` was not found, a warning is shown in the log.
+
+---
+
 ## [2.0.4] - 2026-04-01
 
 - **`Sheet_Guide` is now the first sheet** in `firing_rates_by_cluster.xlsx` (previously second); Summary moves to second.

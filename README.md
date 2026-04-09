@@ -18,6 +18,8 @@ A PySide6 desktop application for analysing and exporting Neuropixel spike data 
 ### Cluster Selection
 - Enter cluster IDs numerically (`1, 5, 12`) or by Kilosort/Phy label (`good`, `mua`, or any custom label)
 - Mix numeric and label inputs in a single field (e.g. `good, 14, 22`)
+- Custom neurontype labels assigned in Phy (e.g. `PMNC`, `NMNC`) are also supported — type them directly into the field
+- Label matching is case-insensitive
 - Label dropdown auto-populates from the selected data folder
 
 ### Firing Rate Analysis
