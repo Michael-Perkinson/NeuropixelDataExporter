@@ -343,7 +343,7 @@ class MainWindow(QMainWindow):  # type: ignore[misc]
     def _create_drug_input_group(self) -> QGroupBox:
         self.drug_name_input = QLineEdit(placeholderText="e.g. Alpha-MSH")
         self.drug_route_combo = QComboBox()
-        self.drug_route_combo.addItems(["Microdialysis", "IV"])
+        self.drug_route_combo.addItems(["Microdialysis", "IV", "Other"])
         self.drug_route_combo.setFixedWidth(120)
         self.drug_start_input = QLineEdit(placeholderText="s")
         self.drug_end_input = QLineEdit(placeholderText="s  (optional)")
@@ -495,12 +495,16 @@ class MainWindow(QMainWindow):  # type: ignore[misc]
         self.cluster_dropdown.setCurrentIndex(0)
 
     def _add_drug_event(self) -> None:
+        route = self.drug_route_combo.currentText()
+        end_text = self.drug_end_input.text().strip()
+        if route in ("Microdialysis", "Other") and not end_text:
+            end_text = "max"
         try:
             parsed = self.controller.add_drug_event(
                 name=self.drug_name_input.text().strip(),
                 peri_drug=self.peri_drug_input.text().strip(),
                 start_text=self.drug_start_input.text().strip(),
-                end_text=self.drug_end_input.text().strip(),
+                end_text=end_text,
             )
         except ValueError as err:
             self.log_output.append(f"Drug event error: {err}")
