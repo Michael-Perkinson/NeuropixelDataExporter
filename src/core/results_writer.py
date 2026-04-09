@@ -77,7 +77,7 @@ def _trim_cell_typing_df(df: pd.DataFrame) -> pd.DataFrame:
             _stability)
 
     keep = ["Cluster", "Pre_Mean_FR_Hz", "Post_Mean_FR_Hz",
-            "Delta_FR_Hz", "Classification", "Baseline_Stability"]
+            "Delta_FR_Hz", "Classification", "Baseline_Stability", "Notes"]
     return df[[c for c in keep if c in df.columns]]
 
 
@@ -352,18 +352,19 @@ def export_data(
                 writer, sheet_name="CCK_Cell_Typing", index=False)
 
         if pe_df is not None and not pe_df.empty:
-            pe_out = _trim_cell_typing_df(pe_df).copy()
+            pe_annotated = pe_df.copy()
             if cck_df is not None and not cck_df.empty:
                 cck_lookup = cck_df.set_index("Cluster")["Classification"]
                 def _add_cck_conflict(row: pd.Series) -> str:
                     cck_cls = cck_lookup.get(row["Cluster"])
                     if cck_cls is not None and cck_cls != row["Classification"]:
                         conflict = f"Conflicts with CCK: {cck_cls}"
-                        existing = str(row["Notes"]) if pd.notna(row["Notes"]) and str(row["Notes"]) else ""
+                        existing = str(row.get("Notes", "")) if pd.notna(row.get("Notes", "")) else ""
                         return f"{existing}; {conflict}" if existing else conflict
-                    return row["Notes"] if pd.notna(row["Notes"]) else ""
-                pe_out["Notes"] = pe_out.apply(_add_cck_conflict, axis=1)
-            pe_out.to_excel(writer, sheet_name="PE_Cell_Typing", index=False)
+                    return row.get("Notes", "") if pd.notna(row.get("Notes", "")) else ""
+                pe_annotated["Notes"] = pe_annotated.apply(_add_cck_conflict, axis=1)
+            _trim_cell_typing_df(pe_annotated).to_excel(
+                writer, sheet_name="PE_Cell_Typing", index=False)
 
         # Baseline mean and SD
         if export_baseline_stats and baseline_stats_dict is not None and baseline_start is not None and baseline_end is not None:
