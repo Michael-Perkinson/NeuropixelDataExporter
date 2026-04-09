@@ -8,9 +8,9 @@ import pandas as pd
 KS_REQUIRED: Final[Sequence[str]] = (
     "spike_times.npy", "spike_clusters.npy")
 
-# One of these must be present for cluster labels
+# Checked in priority order — first found wins
 KS_LABEL_FILES: Final[Sequence[str]] = (
-    "cluster_KSLabel.tsv", "cluster_group.tsv")
+    "cluster_info.tsv", "cluster_KSLabel.tsv", "cluster_group.tsv")
 
 
 def find_specific_files_in_folder(
@@ -70,28 +70,65 @@ def load_spike_data(
     )
 
 
-def create_label_lookup(group_labels_path: str | Path) -> NDArray[np.object_]:
-    """Return array mapping cluster_id → label string ("unknown" if missing)."""
-    cluster_group = pd.read_csv(str(group_labels_path), sep="\t")
+def create_label_lookup(
+    group_labels_path: str | Path,
+    spike_clusters: NDArray[np.int64] | None = None,
+) -> tuple[NDArray[np.object_], list[str]]:
+    """Return (label_array, log_messages) where label_array maps cluster_id → label string.
 
-    if "cluster_id" not in cluster_group.columns:
+    Priority for label source per cluster (first non-blank wins):
+      1. neurontype column (custom Phy annotation, e.g. PMNC/NMNC) — only in cluster_info.tsv
+      2. group column (Phy curation: good/mua/noise)
+      3. KSLabel column (Kilosort's original label)
+      4. "unknown" fallback
+
+    spike_clusters: if provided, the array is sized to cover any cluster IDs present in
+    the spike data even if absent from the label file (e.g. Kilosort noise clusters that
+    were never manually labelled in Phy).
+    """
+    log: list[str] = []
+    path = Path(group_labels_path)
+    df = pd.read_csv(str(path), sep="\t")
+
+    if "cluster_id" not in df.columns:
         raise ValueError("Expected 'cluster_id' column in the file.")
 
-    if "group" in cluster_group.columns:
-        label_column = "group"
-    elif "KSLabel" in cluster_group.columns:
-        label_column = "KSLabel"
-    else:
-        raise ValueError("Expected 'group' or 'KSLabel' column in the file.")
+    is_cluster_info = path.name == "cluster_info.tsv"
 
     cluster_ids = pd.to_numeric(
-        cluster_group["cluster_id"], errors="raise").astype(int).to_numpy()
-    labels = cluster_group[label_column].astype(str).to_numpy()
+        df["cluster_id"], errors="raise").astype(int).to_numpy()
 
-    max_cluster_id = int(cluster_ids.max()) + 1 if cluster_ids.size else 0
+    # Build label array: neurontype > group > KSLabel > "unknown"
+    n = len(cluster_ids)
+    labels = np.full(n, "unknown", dtype=np.object_)
+
+    if "KSLabel" in df.columns:
+        ks = df["KSLabel"].fillna("").astype(str).to_numpy()
+        mask = ks != ""
+        labels[mask] = ks[mask]
+
+    if "group" in df.columns:
+        grp = df["group"].fillna("").astype(str).to_numpy()
+        mask = grp != ""
+        labels[mask] = grp[mask]
+
+    if is_cluster_info and "neurontype" in df.columns:
+        nt = df["neurontype"].fillna("").astype(str).to_numpy()
+        mask = nt != ""
+        labels[mask] = nt[mask]
+        count = int(mask.sum())
+        if count:
+            log.append(f"  {count} cluster(s) have a neurontype annotation.")
+
+    max_from_tsv = int(cluster_ids.max()) + 1 if cluster_ids.size else 0
+    max_from_spikes = (int(spike_clusters.max()) + 1
+                       if spike_clusters is not None and spike_clusters.size
+                       else 0)
+    max_cluster_id = max(max_from_tsv, max_from_spikes)
+
     group_labels_array = np.full(max_cluster_id, "unknown", dtype=np.object_)
     group_labels_array[cluster_ids] = labels
-    return group_labels_array
+    return group_labels_array, log
 
 
 def make_output_folders(data_folder_path: Path) -> tuple[Path, Path, Path]:

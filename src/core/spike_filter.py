@@ -79,7 +79,7 @@ def construct_dataframe(
 
 def get_all_data_from_files(
     file_paths: dict[str, Path],
-) -> tuple[NDArray[np.float64], NDArray[np.int64], NDArray[np.object_]]:
+) -> tuple[NDArray[np.float64], NDArray[np.int64], NDArray[np.object_], list[str]]:
     """
     Load raw spike data and labels from the validated Kilosort folder.
 
@@ -87,21 +87,36 @@ def get_all_data_from_files(
       - "spike_times.npy"
       - "spike_clusters.npy"
       - one of KS_LABEL_FILES
+
+    Returns spike_times, spike_clusters, group_labels_array, and a list of log messages.
     """
     spike_times, spike_clusters = load_spike_data(
         file_paths["spike_times.npy"], file_paths["spike_clusters.npy"]
     )
 
     label_path: Path | None = None
+    label_file_used: str = ""
     for fname in KS_LABEL_FILES:
         if fname in file_paths:
             label_path = file_paths[fname]
+            label_file_used = fname
             break
     if label_path is None:
         raise FileNotFoundError("No label file path found in file_paths.")
 
-    group_labels_array = create_label_lookup(label_path)
-    return spike_times, spike_clusters, group_labels_array
+    group_labels_array, label_log = create_label_lookup(label_path, spike_clusters=spike_clusters)
+
+    log: list[str] = []
+    if label_file_used != "cluster_info.tsv":
+        log.append(
+            f"  Note: cluster_info.tsv not found; using {label_file_used}. "
+            "Custom neurontype labels (e.g. PMNC) will not be available."
+        )
+    else:
+        log.append("  Using cluster_info.tsv for label lookup.")
+    log.extend(label_log)
+
+    return spike_times, spike_clusters, group_labels_array, log
 
 
 def process_filtered_data(
@@ -149,7 +164,7 @@ def resolve_labels_to_cluster_ids(
     return sorted(int(i) for i in np.where(np.isin(group_labels_array, labels))[0])
 
 
-def prepare_filtered_data(file_paths: dict[str, Path]) -> tuple[pd.DataFrame, float]:
+def prepare_filtered_data(file_paths: dict[str, Path]) -> tuple[pd.DataFrame, float, list[str]]:
     """
     Load all spike data and return as a DataFrame with max recording time.
     No filtering is applied here — the GUI selects clusters downstream.
@@ -157,8 +172,9 @@ def prepare_filtered_data(file_paths: dict[str, Path]) -> tuple[pd.DataFrame, fl
     Returns:
       - DataFrame of all spike data (spike_times, spike_clusters, group)
       - Maximum recording time (seconds)
+      - Log messages from label lookup
     """
-    spike_times, spike_clusters, group_labels_array = get_all_data_from_files(
+    spike_times, spike_clusters, group_labels_array, log = get_all_data_from_files(
         file_paths)
 
     max_time = calc_max_time(spike_times)
@@ -166,4 +182,4 @@ def prepare_filtered_data(file_paths: dict[str, Path]) -> tuple[pd.DataFrame, fl
         spike_times, spike_clusters, group_labels_array[spike_clusters]
     )
 
-    return recording_dataframe, max_time
+    return recording_dataframe, max_time, log

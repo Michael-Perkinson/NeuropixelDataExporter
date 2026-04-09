@@ -83,7 +83,9 @@ class AnalysisWorker(QThread):
 
         log("Loading spike data...")
         from src.core.spike_filter import prepare_filtered_data
-        recording_dataframe, max_time = prepare_filtered_data(self.file_paths)
+        recording_dataframe, max_time, label_log = prepare_filtered_data(self.file_paths)
+        for msg in label_log:
+            log(msg)
 
         # Resolve label-based clusters from the loaded dataframe
         cluster_ids = self.cluster_ids
@@ -429,7 +431,7 @@ class GUIController:
             return
 
         try:
-            labels_array = create_label_lookup(label_path)
+            labels_array, _ = create_label_lookup(label_path)
             unique_labels = sorted(set(labels_array), key=str.lower)
 
             dropdown.clear()
@@ -522,9 +524,23 @@ class GUIController:
         if labels:
             log.append(f"Resolving labels {labels}...")
             from src.core.spike_filter import prepare_filtered_data as _pfd
-            tmp_df, max_time_tmp = _pfd(file_paths)
+            tmp_df, max_time_tmp, tmp_label_log = _pfd(file_paths)
+            for msg in tmp_label_log:
+                log.append(msg)
+
+            # Case-insensitive label matching
+            labels_lower = [lbl.lower() for lbl in labels]
+            standard_labels = {"good", "mua", "noise"}
+            has_cluster_info = any("cluster_info.tsv" in m for m in tmp_label_log)
+            for lbl in labels_lower:
+                if lbl not in standard_labels and not has_cluster_info:
+                    log.append(
+                        f"  ⚠ Label '{lbl}' is not a standard Phy label (good/mua/noise) "
+                        "and cluster_info.tsv was not found — it may not match any clusters."
+                    )
+
             label_ids = (
-                tmp_df[tmp_df["group"].isin(labels)]["spike_clusters"]
+                tmp_df[tmp_df["group"].str.lower().isin(labels_lower)]["spike_clusters"]
                 .unique().tolist()
             )
             cluster_ids = sorted(set(cluster_ids) | {int(c) for c in label_ids})
