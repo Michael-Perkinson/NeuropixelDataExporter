@@ -73,7 +73,7 @@ def test_export_hazard_excel_with_early_window(tmp_path):
 def test_export_data_creates_files(tmp_path):
     export_data(
         data_export={0: np.array([100, 200, 300])},
-        baseline_fr_dict={0: 5.0},
+        baseline_stats_dict={0: (5.0, 1.0)},
         data_folder_path=tmp_path,
         bin_size=0.1,
         start_time=0.0,
@@ -92,7 +92,7 @@ def test_export_data_xlsx_sheet_name(tmp_path):
     """Firing rates sheet is named Binned_Firing_Rates, not Firing_Rates_Raw."""
     export_data(
         data_export={0: np.array([100, 200, 300])},
-        baseline_fr_dict={0: 5.0},
+        baseline_stats_dict={0: (5.0, 1.0)},
         data_folder_path=tmp_path,
         bin_size=0.1,
         start_time=0.0,
@@ -113,7 +113,7 @@ def test_export_data_xlsx_sheet_name(tmp_path):
 def test_export_data_no_spikes(tmp_path):
     export_dir, images_dir, df_raw = export_data(
         data_export={},
-        baseline_fr_dict={},
+        baseline_stats_dict={},
         data_folder_path=tmp_path,
         bin_size=0.1,
         start_time=0.0,
@@ -131,7 +131,7 @@ def test_export_data_sheet_guide_first_summary_second(tmp_path):
     """Sheet_Guide should be first, Summary second in the output xlsx."""
     export_data(
         data_export={0: np.array([100, 200, 300])},
-        baseline_fr_dict=None,
+        baseline_stats_dict=None,
         data_folder_path=tmp_path,
         bin_size=0.1,
         start_time=0.0,
@@ -150,7 +150,7 @@ def test_export_data_binned_firing_rates_last(tmp_path):
     """Binned_Firing_Rates should be the last sheet in the output xlsx."""
     export_data(
         data_export={0: np.array([100, 200, 300])},
-        baseline_fr_dict=None,
+        baseline_stats_dict=None,
         data_folder_path=tmp_path,
         bin_size=0.1,
         start_time=0.0,

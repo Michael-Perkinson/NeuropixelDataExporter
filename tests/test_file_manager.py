@@ -60,7 +60,7 @@ def test_create_label_lookup_group(tmp_path):
     df.to_csv(tsv_file, sep="\t", index=False)
 
     # Create lookup array using our function
-    lookup = create_label_lookup(tsv_file)
+    lookup, _ = create_label_lookup(tsv_file)
 
     # Check that the lookup returns the expected group labels
     assert lookup[0] == "A"
@@ -76,7 +76,7 @@ def test_create_label_lookup_kslabel(tmp_path):
     df.to_csv(tsv_file, sep="\t", index=False)
 
     # Create lookup array using our function
-    lookup = create_label_lookup(tsv_file)
+    lookup, _ = create_label_lookup(tsv_file)
 
     # Check that the lookup returns the expected group labels
     assert lookup[0] == "good"
@@ -85,15 +85,14 @@ def test_create_label_lookup_kslabel(tmp_path):
 
 
 def test_create_label_lookup_random_str(tmp_path):
-    # Create a dummy TSV file with cluster labels
+    # No recognised label column → all clusters get "unknown"
     tsv_file = tmp_path / "cluster_group.tsv"
     data = {"cluster_id": [0, 1, 2], "random": ["A", "B", "C"]}
     df = pd.DataFrame(data)
     df.to_csv(tsv_file, sep="\t", index=False)
 
-    # Create lookup array using our function
-    with pytest.raises(ValueError):
-        create_label_lookup(tsv_file)
+    lookup, _ = create_label_lookup(tsv_file)
+    assert all(lookup[i] == "unknown" for i in range(3))
 
 
 # --- Tests for validate_ks_folder --- #

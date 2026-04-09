@@ -191,7 +191,7 @@ All output is saved to a timestamped folder inside your data folder.
 | **Sheet_Guide** | First sheet — plain-English description of every tab, what it contains and the time window it covers |
 | **CCK_Cell_Typing** | Pre/Post mean FR, delta, Classification (`Putative Oxytocin` / `Putative Vasopressin` / `Unclassifiable (Zero FR)`), Notes (baseline stability direction, zero pre-FR flag) |
 | **PE_Cell_Typing** | Same format as CCK_Cell_Typing |
-| **Baseline_Mean_and_SD (Xs–Ys)** | Mean and SD of firing rate across the baseline window (if FR Baseline enabled); mean is used to compute delta sheets |
+| **Baseline_Mean_FR (Xs–Ys)** | Mean firing rate (Hz) across the baseline window per cluster (if FR Baseline enabled); used to compute delta sheets |
 | **Peri_\<Drug\>** | Binned firing rates over the peri-drug window, t=0 at drug onset |
 | **Peri_\<Drug\>\_Delta** | Per-cluster firing rate change from baseline over the peri-drug window (if FR Baseline enabled) |
 | **Mean_by_Label_Peri** | All peri-drug windows combined into one sheet, averaged by Phy group label, each drug separated by a header row (if Mean by Label enabled) |

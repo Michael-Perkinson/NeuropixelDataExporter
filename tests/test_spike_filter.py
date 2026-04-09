@@ -74,7 +74,7 @@ def test_get_all_data_from_files(tmp_path):
     file_paths = {f: str(tmp_path / f) for f in required_files}
 
     # Call get_user_input
-    times, clusters, group_array = get_all_data_from_files(file_paths)
+    times, clusters, group_array, _ = get_all_data_from_files(file_paths)
     np.testing.assert_array_equal(times, spike_times)
     np.testing.assert_array_equal(clusters, spike_clusters)
 
@@ -108,7 +108,7 @@ def test_prepare_filtered_data(tmp_path):
     df.to_csv(tmp_path / "cluster_group.tsv", sep="\t", index=False)
     file_paths = {f: str(tmp_path / f) for f in required_files}
 
-    df_out, max_time = prepare_filtered_data(file_paths)
+    df_out, max_time, _ = prepare_filtered_data(file_paths)
     # Verify DataFrame columns.
     assert set(df_out.columns) == {"spike_times", "spike_clusters", "group"}
 

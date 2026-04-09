@@ -83,7 +83,7 @@ class AnalysisWorker(QThread):
 
         log("Loading spike data...")
         from src.core.spike_filter import prepare_filtered_data
-        recording_dataframe, max_time, label_log = prepare_filtered_data(self.file_paths)
+        recording_dataframe, _, label_log = prepare_filtered_data(self.file_paths)
         for msg in label_log:
             log(msg)
 
@@ -99,7 +99,7 @@ class AnalysisWorker(QThread):
                     cluster_group_map[cid] = str(rows.iloc[0])
 
         log(f"Processing {len(cluster_ids)} cluster(s)...")
-        raw_fr_dict, baseline_fr_dict = process_cluster_data(
+        raw_fr_dict, baseline_stats_dict = process_cluster_data(
             recording_dataframe,
             cluster_ids,
             self.start_time,
@@ -134,7 +134,7 @@ class AnalysisWorker(QThread):
         log("Exporting spike times and firing rate outputs...")
         export_dir, images_dir, firing_rate_df = export_data(
             raw_fr_dict,
-            baseline_fr_dict if self.use_baseline else None,
+            baseline_stats_dict if self.use_baseline else None,
             data_folder_path,
             self.bin_size,
             self.start_time,

@@ -247,7 +247,7 @@ def export_spike_times_txt(
 
 def export_data(
     data_export: dict[int, NDArray[np.float64]],
-    baseline_fr_dict: dict[int, float | None] | None,
+    baseline_stats_dict: dict[int, tuple[float, float]] | None,
     data_folder_path: Path,
     bin_size: float,
     start_time: float,
@@ -274,7 +274,7 @@ def export_data(
       1. Summary
       2. CCK_Cell_Typing (if CCK used)
       3. PE_Cell_Typing (if PE used)
-      4. Baseline_Mean_and_SD (if baseline used)
+      4. Baseline_Mean_FR (if baseline used)
       5. Peri_<Drug> (one per drug event with a peri window)
       5b. Peri_<Drug>_Delta (if baseline used)
       6. Mean_by_Label_Peri (all drugs combined, if mean_label_data)
@@ -319,7 +319,7 @@ def export_data(
     label_map = _cluster_label_map(cck_df, pe_df)
     has_baseline = (
         export_delta_from_baseline
-        and baseline_fr_dict is not None
+        and baseline_stats_dict is not None
         and baseline_start is not None
         and baseline_end is not None
     )
@@ -356,10 +356,9 @@ def export_data(
                 writer, sheet_name="PE_Cell_Typing", index=False)
 
         # Baseline mean and SD
-        if export_baseline_stats and baseline_start is not None and baseline_end is not None:
-            baselined_df = create_baselined_df(
-                baseline_start, baseline_end, bin_size, filtered_export)
-            baseline_sheet = f"Baseline_Mean_and_SD ({baseline_start:.0f}s-{baseline_end:.0f}s)"
+        if export_baseline_stats and baseline_stats_dict is not None and baseline_start is not None and baseline_end is not None:
+            baselined_df = create_baselined_df(baseline_stats_dict)
+            baseline_sheet = f"Baseline_Mean_FR ({baseline_start:.0f}s-{baseline_end:.0f}s)"
             baselined_df.to_excel(
                 writer, sheet_name=baseline_sheet[:31], index=False)
 
@@ -395,11 +394,11 @@ def export_data(
                              :31], index=False)
 
             # Delta-from-baseline peri sheet
-            if has_baseline and baseline_fr_dict is not None:
+            if has_baseline and baseline_stats_dict is not None:
                 clipped_end = min(post_abs_f, end_time)
                 peri_raw_data, peri_delta_data = calculate_firing_rate(
                     filtered_export, bin_size, pre_abs_f, clipped_end,
-                    baseline_fr_dict,
+                    baseline_stats_dict,
                 )
                 _, peri_delta_df = create_firing_rate_dataframes(
                     peri_raw_data, peri_delta_data)
@@ -524,7 +523,7 @@ def _build_fr_guide_sheet(
 
     if has_baseline and baseline_start is not None and baseline_end is not None:
         lbl = f"{baseline_start:.0f}s–{baseline_end:.0f}s"
-        _add("Baseline", f"Baseline_Mean_and_SD ({lbl})",
+        _add("Baseline", f"Baseline_Mean_FR ({lbl})",
              f"Per-cluster mean and SD firing rate across the baseline window ({lbl}); mean used to compute delta sheets")
 
     for ev in drug_events:

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.6] - 2026-04-09
+
+- **Fixed baseline mean and SD always showing 0**: baseline stats were previously computed by re-histogramming the already-windowed spike data; they are now computed directly from raw (unfiltered) spike times, so the baseline window is independent of the analysis window.
+- **Removed SD from baseline sheet**: SD was always 0 since the baseline is a single mean over the entire user-defined window. The sheet is renamed `Baseline_Mean_FR (Xs–Ys)` and contains only `Cluster` and `Mean Firing Rate (Hz)`.
+
+---
+
 ## [2.0.5] - 2026-04-09
 
 - **Fixed crash when spike_clusters.npy contains IDs beyond the label file range**: Kilosort assigns IDs to all detected units including those never curated in Phy. If the highest cluster ID in the spike data exceeded the highest ID in the label TSV, an IndexError occurred during data loading. The label array is now sized to cover all IDs present in the spike data, with unlabelled clusters defaulting to `"unknown"`.

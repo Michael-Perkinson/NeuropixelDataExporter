@@ -1,8 +1,9 @@
+import pytest
 import numpy as np
 import pandas as pd
 
 from src.core.firing_rate import (
-    compute_baseline_firing_rate,
+    compute_baseline_stats,
     shift_spike_times_to_ms,
     process_cluster_data,
     calculate_firing_rate,
@@ -12,16 +13,17 @@ from src.core.firing_rate import (
 )
 
 
-def test_compute_baseline_firing_rate():
+def test_compute_baseline_stats():
     spikes = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-    expected_rate = 3 / (4.0 - 2.0)
-    rate = compute_baseline_firing_rate(spikes, 2.0, 4.0)
-    assert rate == expected_rate
+    # Window 2.0–4.0 s, spikes at 2.0, 3.0, 4.0 → 3/2 = 1.5 Hz
+    mean, _ = compute_baseline_stats(spikes, 2.0, 4.0)
+    assert mean == pytest.approx(1.5)
 
 
-def test_compute_baseline_firing_rate_invalid():
+def test_compute_baseline_stats_invalid():
     spikes = np.array([1.0, 2.0, 3.0])
-    assert compute_baseline_firing_rate(spikes, 4.0, 2.0) == 0.0
+    mean, _ = compute_baseline_stats(spikes, 4.0, 2.0)
+    assert mean == 0.0
 
 
 def test_shift_spike_times_with_drug():
@@ -76,9 +78,11 @@ def test_process_cluster_data_with_baseline():
         baseline_start=1.0,
         baseline_end=3.0,
     )
-    # Spikes in [1.0, 3.0] for cluster 0: 1.0, 3.0 → 2 spikes / 2s = 1.0 Hz
+    # Spikes in [1.0, 3.0] for cluster 0: 1.0, 3.0 → 2 spikes / 2s = 1.0 Hz mean
     assert baseline_dict is not None
-    assert baseline_dict[0] == 1.0
+    mean_fr, sd_fr = baseline_dict[0]
+    assert mean_fr == pytest.approx(1.0)
+    assert sd_fr >= 0.0
 
 
 def test_calculate_firing_rate():
@@ -86,10 +90,10 @@ def test_calculate_firing_rate():
         0: np.array([100.0, 200.0, 300.0, 400.0, 500.0]),
         1: np.array([150.0, 250.0, 350.0, 450.0, 550.0]),
     }
-    baseline_fr_dict = {0: 5.0, 1: 6.0}
+    baseline_stats_dict = {0: (5.0, 1.0), 1: (6.0, 1.0)}
     raw_data, delta_data = calculate_firing_rate(
         data_export, bin_size=0.1, start_time=0.0, end_time=1.0,
-        baseline_fr_dict=baseline_fr_dict,
+        baseline_stats_dict=baseline_stats_dict,
     )
     assert "Time Intervals (s)" in raw_data
     assert "Cluster_0" in raw_data
@@ -103,7 +107,7 @@ def test_calculate_firing_rate_bin_edges():
     data_export = {0: np.array([100.0, 200.0, 300.0, 400.0, 500.0, 900.0])}
     raw_data, _ = calculate_firing_rate(
         data_export, bin_size=0.3, start_time=0.0, end_time=0.75,
-        baseline_fr_dict=None,
+        baseline_stats_dict=None,
     )
     actual_bins = raw_data["Time Intervals (s)"]
     expected_bins = np.arange(0.0, 0.75, 0.3)
@@ -129,12 +133,9 @@ def test_create_firing_rate_dataframes():
 
 
 def test_create_baselined_df():
-    data_export = {
-        0: np.array([100.0, 200.0, 300.0, 400.0, 500.0]),
-        1: np.array([150.0, 250.0, 350.0, 450.0, 550.0]),
-    }
-    df = create_baselined_df(
-        baseline_start=0.0, baseline_end=0.5, bin_size=0.1, data_export=data_export
-    )
-    assert list(df.columns) == ["Cluster", "Mean Firing Rate", "Standard Deviation"]
+    baseline_stats_dict = {0: (1.5, 0.0), 1: (2.0, 0.0)}
+    df = create_baselined_df(baseline_stats_dict)
+    assert list(df.columns) == ["Cluster", "Mean Firing Rate (Hz)"]
     assert len(df) == 2
+    assert df.loc[df["Cluster"] == "Cluster_0", "Mean Firing Rate (Hz)"].iloc[0] == pytest.approx(1.5)
+    assert df.loc[df["Cluster"] == "Cluster_1", "Mean Firing Rate (Hz)"].iloc[0] == pytest.approx(2.0)
