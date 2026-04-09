@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.7] - 2026-04-09
+
+- **PE_Cell_Typing conflict annotation**: when both CCK and PE protocols are run and their classifications disagree for a cluster, the PE Notes column now includes a conflict note (e.g. `Conflicts with CCK: Putative Vasopressin`). This makes it easy to spot neurons where the two protocols give different answers. If the cluster already has a baseline stability note, the conflict is appended after a semicolon.
+
+---
+
 ## [2.0.6] - 2026-04-09
 
 - **Fixed baseline mean and SD always showing 0**: baseline stats were previously computed by re-histogramming the already-windowed spike data; they are now computed directly from raw (unfiltered) spike times, so the baseline window is independent of the analysis window.

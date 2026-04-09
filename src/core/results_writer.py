@@ -352,8 +352,18 @@ def export_data(
                 writer, sheet_name="CCK_Cell_Typing", index=False)
 
         if pe_df is not None and not pe_df.empty:
-            _trim_cell_typing_df(pe_df).to_excel(
-                writer, sheet_name="PE_Cell_Typing", index=False)
+            pe_out = _trim_cell_typing_df(pe_df).copy()
+            if cck_df is not None and not cck_df.empty:
+                cck_lookup = cck_df.set_index("Cluster")["Classification"]
+                def _add_cck_conflict(row: pd.Series) -> str:
+                    cck_cls = cck_lookup.get(row["Cluster"])
+                    if cck_cls is not None and cck_cls != row["Classification"]:
+                        conflict = f"Conflicts with CCK: {cck_cls}"
+                        existing = str(row["Notes"]) if pd.notna(row["Notes"]) and str(row["Notes"]) else ""
+                        return f"{existing}; {conflict}" if existing else conflict
+                    return row["Notes"] if pd.notna(row["Notes"]) else ""
+                pe_out["Notes"] = pe_out.apply(_add_cck_conflict, axis=1)
+            pe_out.to_excel(writer, sheet_name="PE_Cell_Typing", index=False)
 
         # Baseline mean and SD
         if export_baseline_stats and baseline_stats_dict is not None and baseline_start is not None and baseline_end is not None:
