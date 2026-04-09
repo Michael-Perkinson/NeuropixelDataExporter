@@ -76,6 +76,17 @@ def _trim_cell_typing_df(df: pd.DataFrame) -> pd.DataFrame:
         df["Baseline_Stability"] = df["Baseline_Slope_Hz_per_min"].apply(
             _stability)
 
+    # Strip baseline stability text from Notes (already in Baseline_Stability column).
+    # Keep only zero-FR warnings and any conflict annotations.
+    if "Notes" in df.columns:
+        def _filter_notes(note: str) -> str:
+            if not isinstance(note, str) or not note:
+                return ""
+            parts = [p.strip() for p in note.split(";")]
+            kept = [p for p in parts if p.startswith("⚠ Zero") or p.startswith("Conflicts with")]
+            return "; ".join(kept)
+        df["Notes"] = df["Notes"].apply(_filter_notes)
+
     keep = ["Cluster", "Pre_Mean_FR_Hz", "Post_Mean_FR_Hz",
             "Delta_FR_Hz", "Classification", "Baseline_Stability", "Notes"]
     return df[[c for c in keep if c in df.columns]]
@@ -352,19 +363,19 @@ def export_data(
                 writer, sheet_name="CCK_Cell_Typing", index=False)
 
         if pe_df is not None and not pe_df.empty:
-            pe_annotated = pe_df.copy()
+            pe_out = _trim_cell_typing_df(pe_df)
             if cck_df is not None and not cck_df.empty:
                 cck_lookup = cck_df.set_index("Cluster")["Classification"]
                 def _add_cck_conflict(row: pd.Series) -> str:
                     cck_cls = cck_lookup.get(row["Cluster"])
                     if cck_cls is not None and cck_cls != row["Classification"]:
                         conflict = f"Conflicts with CCK: {cck_cls}"
-                        existing = str(row.get("Notes", "")) if pd.notna(row.get("Notes", "")) else ""
+                        existing = str(row.get("Notes", "")).strip()
                         return f"{existing}; {conflict}" if existing else conflict
-                    return row.get("Notes", "") if pd.notna(row.get("Notes", "")) else ""
-                pe_annotated["Notes"] = pe_annotated.apply(_add_cck_conflict, axis=1)
-            _trim_cell_typing_df(pe_annotated).to_excel(
-                writer, sheet_name="PE_Cell_Typing", index=False)
+                    return str(row.get("Notes", "")).strip()
+                pe_out = pe_out.copy()
+                pe_out["Notes"] = pe_out.apply(_add_cck_conflict, axis=1)
+            pe_out.to_excel(writer, sheet_name="PE_Cell_Typing", index=False)
 
         # Baseline mean and SD
         if export_baseline_stats and baseline_stats_dict is not None and baseline_start is not None and baseline_end is not None:
