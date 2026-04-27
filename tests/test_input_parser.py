@@ -1,4 +1,5 @@
-from src.core.input_parser import parse_channels_or_labels
+import pytest
+from src.core.input_parser import parse_channels_or_labels, validate_and_parse_drug_event
 
 
 def test_parse_channels_or_labels_valid_input():
@@ -112,3 +113,76 @@ def test_parse_float_like_strings():
     assert "error" not in result
     assert result["channels"] == []
     assert result["labels"] == ["1.0", "2.5", "3.1", "label"]
+
+
+# --- validate_and_parse_drug_event ---
+
+def test_drug_event_missing_name():
+    with pytest.raises(ValueError, match="name"):
+        validate_and_parse_drug_event(name="", peri_drug="", start_text="100", end_text="")
+
+
+def test_drug_event_invalid_start():
+    with pytest.raises(ValueError, match="start"):
+        validate_and_parse_drug_event(name="Drug", peri_drug="", start_text="abc", end_text="")
+
+
+def test_drug_event_acute_no_end():
+    result = validate_and_parse_drug_event(name="Drug", peri_drug="", start_text="100", end_text="")
+    assert result["start"] == 100.0
+    assert result["end"] is None
+    assert result["type"] == "Acute"
+
+
+def test_drug_event_end_max():
+    result = validate_and_parse_drug_event(name="Drug", peri_drug="", start_text="100", end_text="max")
+    assert result["end"] == float("inf")
+    assert result["type"] == "Continuous"
+
+
+def test_drug_event_continuous_with_end():
+    result = validate_and_parse_drug_event(name="Drug", peri_drug="", start_text="100", end_text="200")
+    assert result["end"] == 200.0
+    assert result["type"] == "Continuous"
+
+
+def test_drug_event_acute_same_start_end():
+    result = validate_and_parse_drug_event(name="Drug", peri_drug="", start_text="100", end_text="100")
+    assert result["type"] == "Acute"
+
+
+def test_drug_event_end_before_start():
+    with pytest.raises(ValueError, match="End time"):
+        validate_and_parse_drug_event(name="Drug", peri_drug="", start_text="200", end_text="100")
+
+
+def test_drug_event_invalid_end():
+    with pytest.raises(ValueError, match="End time"):
+        validate_and_parse_drug_event(name="Drug", peri_drug="", start_text="100", end_text="abc")
+
+
+def test_drug_event_peri_single_value():
+    result = validate_and_parse_drug_event(name="Drug", peri_drug="300", start_text="600", end_text="1200")
+    assert result["start_offset"] == 300.0
+    assert result["end_offset"] == 1500.0
+
+
+def test_drug_event_peri_pre_post_pair():
+    result = validate_and_parse_drug_event(name="Drug", peri_drug="300/600", start_text="600", end_text="1200")
+    assert result["start_offset"] == 300.0
+    assert result["end_offset"] == 1800.0
+
+
+def test_drug_event_peri_clamps_to_zero():
+    result = validate_and_parse_drug_event(name="Drug", peri_drug="9999", start_text="100", end_text="200")
+    assert result["start_offset"] == 0.0
+
+
+def test_drug_event_peri_no_end_uses_start():
+    result = validate_and_parse_drug_event(name="Drug", peri_drug="60", start_text="300", end_text="")
+    assert result["end_offset"] == 360.0
+
+
+def test_drug_event_invalid_peri():
+    with pytest.raises(ValueError, match="Peri-drug"):
+        validate_and_parse_drug_event(name="Drug", peri_drug="abc", start_text="100", end_text="")

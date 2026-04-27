@@ -8,10 +8,12 @@ from src.core.file_manager import (
     find_specific_files_in_folder,
     load_spike_data,
     create_label_lookup,
+    get_recording_duration,
     make_output_folders,
     make_specific_folder,
     KS_REQUIRED,
     KS_LABEL_FILES,
+    SAMPLE_RATE,
 )
 
 # --- Test for find_specific_files_in_folder --- #
@@ -123,6 +125,54 @@ def test_make_specific_folder(tmp_path):
     assert specific_folder.is_dir()
     assert specific_folder.parent == tmp_path
     assert specific_folder.name == folder_name
+
+
+def test_create_label_lookup_missing_cluster_id(tmp_path):
+    tsv_file = tmp_path / "cluster_group.tsv"
+    pd.DataFrame({"wrong_col": [0, 1]}).to_csv(tsv_file, sep="\t", index=False)
+    with pytest.raises(ValueError, match="cluster_id"):
+        create_label_lookup(tsv_file)
+
+
+def test_create_label_lookup_neurontype(tmp_path):
+    tsv_file = tmp_path / "cluster_info.tsv"
+    data = {"cluster_id": [0, 1], "group": ["good", "mua"], "neurontype": ["PMNC", ""]}
+    pd.DataFrame(data).to_csv(tsv_file, sep="\t", index=False)
+    lookup, log = create_label_lookup(tsv_file)
+    assert lookup[0] == "PMNC"
+    assert lookup[1] == "mua"
+    assert any("neurontype" in msg for msg in log)
+
+
+def test_validate_ks_folder_missing_label(tmp_path):
+    for f in KS_REQUIRED:
+        (tmp_path / f).write_text("x")
+    with pytest.raises(FileNotFoundError, match="Missing label"):
+        validate_ks_folder(tmp_path, list(KS_REQUIRED), list(KS_LABEL_FILES))
+
+
+def test_get_recording_duration(tmp_path):
+    samples = np.array([0, 15000, 30000, 90000])  # last = 3.0 s at 30 kHz
+    path = tmp_path / "spike_times.npy"
+    np.save(path, samples)
+    assert get_recording_duration(path) == 3.0
+
+
+def test_get_recording_duration_empty(tmp_path):
+    path = tmp_path / "spike_times.npy"
+    np.save(path, np.array([]))
+    assert get_recording_duration(path) is None
+
+
+def test_get_recording_duration_missing():
+    assert get_recording_duration(Path("nonexistent.npy")) is None
+
+
+def test_find_specific_files_returns_only_present(tmp_path):
+    (tmp_path / "spike_times.npy").write_text("x")
+    result = find_specific_files_in_folder(tmp_path, ["spike_times.npy"], ["cluster_group.tsv"])
+    assert "spike_times.npy" in result
+    assert "cluster_group.tsv" not in result
 
 
 def test_make_output_folders(tmp_path):

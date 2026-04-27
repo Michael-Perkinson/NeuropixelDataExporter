@@ -1,6 +1,28 @@
 import numpy as np
 import pandas as pd
+import pytest
 from src.core.interactive_plot import export_firing_rate_html
+
+
+def _make_df():
+    return pd.DataFrame({
+        "Time Intervals (s)": np.array([0, 1, 2, 3]),
+        "Cluster_0": np.array([5, 10, 15, 20]),
+    })
+
+
+def test_export_firing_rate_html_missing_time_column(tmp_path):
+    df = pd.DataFrame({"Cluster_0": [1, 2, 3]})
+    with pytest.raises(ValueError, match="Time Intervals"):
+        export_firing_rate_html(df, tmp_path, 1.0, [])
+
+
+def test_export_firing_rate_html_interval_drug_event(tmp_path):
+    """Drug event with a numeric end time renders shaded region (interval path)."""
+    df = _make_df()
+    drug_events = [{"name": "Drug", "start": 1.0, "end": 2.0}]
+    export_firing_rate_html(df, tmp_path, 1.0, drug_events)
+    assert any(f.suffix == ".html" for f in tmp_path.iterdir())
 
 
 def test_export_firing_rate_html(tmp_path):
