@@ -135,9 +135,9 @@ class MainWindow(QMainWindow):  # type: ignore[misc]
         self.start_time_input = QLineEdit(placeholderText="0 s")
         self.end_time_input = QLineEdit(placeholderText="max")
         self.bin_size_input = QLineEdit(placeholderText="600 s")
-        self.start_time_input.setFixedWidth(70)
-        self.end_time_input.setFixedWidth(70)
-        self.bin_size_input.setFixedWidth(70)
+        self.start_time_input.setFixedWidth(80)
+        self.end_time_input.setFixedWidth(110)
+        self.bin_size_input.setFixedWidth(80)
 
         time_row = QHBoxLayout()
         time_row.setSpacing(4)
@@ -480,8 +480,10 @@ class MainWindow(QMainWindow):  # type: ignore[misc]
                 "No required files found in selected folder.")
             return
 
-        self.controller.try_populate_label_dropdown(
+        max_time = self.controller.try_populate_label_dropdown(
             found_files, self.cluster_dropdown, self.log_output)
+        if max_time is not None and not self.end_time_input.text().strip():
+            self.end_time_input.setText(f"{max_time} (max)")
 
     def _on_label_selected(self, index: int) -> None:
         if index == 0:

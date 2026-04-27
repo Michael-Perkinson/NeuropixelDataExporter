@@ -13,6 +13,20 @@ KS_LABEL_FILES: Final[Sequence[str]] = (
     "cluster_info.tsv", "cluster_KSLabel.tsv", "cluster_group.tsv")
 
 
+SAMPLE_RATE: Final[float] = 30000.0
+
+
+def get_recording_duration(spike_times_path: str | Path) -> float | None:
+    """Return recording duration in seconds from spike_times.npy, or None on failure."""
+    try:
+        raw = np.load(str(spike_times_path)).ravel()
+        if raw.size:
+            return round(float(raw[-1]) / SAMPLE_RATE, 2)
+    except Exception:
+        pass
+    return None
+
+
 def find_specific_files_in_folder(
     folder_path: Path,
     always_required: Sequence[str],

@@ -8,7 +8,7 @@ from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import QFileDialog, QMessageBox, QTextEdit, QWidget
 
 from src.core.cck_analysis import analyse_cck_response, analyse_pe_response
-from src.core.file_manager import KS_LABEL_FILES, KS_REQUIRED, create_label_lookup, validate_ks_folder
+from src.core.file_manager import KS_LABEL_FILES, KS_REQUIRED, create_label_lookup, get_recording_duration, validate_ks_folder
 from src.core.firing_rate import process_cluster_data
 from src.core.input_parser import parse_channels_or_labels, validate_and_parse_drug_event
 from src.core.interactive_plot import export_firing_rate_html
@@ -83,7 +83,8 @@ class AnalysisWorker(QThread):
 
         log("Loading spike data...")
         from src.core.spike_filter import prepare_filtered_data
-        recording_dataframe, _, label_log = prepare_filtered_data(self.file_paths)
+        recording_dataframe, _, label_log = prepare_filtered_data(
+            self.file_paths)
         for msg in label_log:
             log(msg)
 
@@ -94,7 +95,8 @@ class AnalysisWorker(QThread):
         cluster_group_map: dict[int, str] = {}
         if self.mean_label_data:
             for cid in cluster_ids:
-                rows = recording_dataframe[recording_dataframe["spike_clusters"] == cid]["group"]
+                rows = recording_dataframe[recording_dataframe["spike_clusters"]
+                                           == cid]["group"]
                 if not rows.empty:
                     cluster_group_map[cid] = str(rows.iloc[0])
 
@@ -157,7 +159,8 @@ class AnalysisWorker(QThread):
 
             # Full-recording ISI + hazard
             isi_df, _ = calculate_isi_histogram(raw_fr_dict)
-            hazard_df, hazard_summary_df, _, _ = calculate_hazard_function(isi_df)
+            hazard_df, hazard_summary_df, _, _ = calculate_hazard_function(
+                isi_df)
 
             # Early-recording window ISI + hazard
             early_end = min(self.early_hazard_end, self.end_time)
@@ -180,7 +183,8 @@ class AnalysisWorker(QThread):
 
                     pre_isi = calculate_windowed_isi(
                         raw_fr_dict, pre_win_start, pre_win_end, col_suffix="_PreDrug")
-                    pre_haz, pre_haz_summary, _, _ = calculate_hazard_function(pre_isi)
+                    pre_haz, pre_haz_summary, _, _ = calculate_hazard_function(
+                        pre_isi)
 
                     epoch: dict[str, Any] = {
                         "name": ev["name"],
@@ -194,14 +198,16 @@ class AnalysisWorker(QThread):
                     # 1 bin at the end of drug application (only if drug has an end time)
                     if drug_end_raw is not None:
                         import math as _math
-                        drug_end_f = self.end_time if _math.isinf(float(drug_end_raw)) else float(drug_end_raw)
+                        drug_end_f = self.end_time if _math.isinf(
+                            float(drug_end_raw)) else float(drug_end_raw)
                         drug_end_f = min(drug_end_f, self.end_time)
                         end_win_start = max(0.0, drug_end_f - self.bin_size)
                         end_win_end = drug_end_f
 
                         end_isi = calculate_windowed_isi(
                             raw_fr_dict, end_win_start, end_win_end, col_suffix="_EndDrug")
-                        end_haz, end_haz_summary, _, _ = calculate_hazard_function(end_isi)
+                        end_haz, end_haz_summary, _, _ = calculate_hazard_function(
+                            end_isi)
 
                         epoch["end_win_start"] = end_win_start
                         epoch["end_win_end"] = end_win_end
@@ -231,7 +237,8 @@ class AnalysisWorker(QThread):
             log("Exporting interactive firing rate plots...")
             # Resolve "max" (inf) drug end times to actual recording end_time
             resolved_events = [
-                {**ev, "end": self.end_time} if (ev.get("end") is not None and math.isinf(ev["end"])) else ev
+                {**ev, "end": self.end_time} if (ev.get("end")
+                                                 is not None and math.isinf(ev["end"])) else ev
                 for ev in self.plot_events
             ]
             export_firing_rate_html(
@@ -255,6 +262,12 @@ def _get_base_dir() -> Path:
 
 def _parse_float(value: str, default: float | None) -> float | None:
     s = value.strip()
+    if not s:
+        return default
+    if s.lower() in ("max", "inf"):
+        return default
+    # strip trailing "(max)" hint added by the UI
+    s = s.split("(")[0].strip()
     if not s:
         return default
     return float(s)
@@ -333,10 +346,13 @@ class GUIController:
             opts = settings.get("optional_outputs", {})
 
             view.txt_export_checkbox.setChecked(opts.get("export_txt", True))
-            view.all_graphs_checkbox.setChecked(opts.get("export_all_graphs", True))
-            view.binned_hazard_checkbox.setChecked(opts.get("binned_hazard", True))
+            view.all_graphs_checkbox.setChecked(
+                opts.get("export_all_graphs", True))
+            view.binned_hazard_checkbox.setChecked(
+                opts.get("binned_hazard", True))
             view.peri_hazard_checkbox.setChecked(opts.get("peri_hazard", True))
-            view.peri_drug_checkbox.setChecked(opts.get("export_peri_drug", True))
+            view.peri_drug_checkbox.setChecked(
+                opts.get("export_peri_drug", True))
 
             theme = settings.get("theme", "light")
             if theme == "dark":
@@ -372,10 +388,13 @@ class GUIController:
             opts = settings.get("optional_outputs", {})
 
             view.txt_export_checkbox.setChecked(opts.get("export_txt", True))
-            view.all_graphs_checkbox.setChecked(opts.get("export_all_graphs", True))
-            view.binned_hazard_checkbox.setChecked(opts.get("binned_hazard", True))
+            view.all_graphs_checkbox.setChecked(
+                opts.get("export_all_graphs", True))
+            view.binned_hazard_checkbox.setChecked(
+                opts.get("binned_hazard", True))
             view.peri_hazard_checkbox.setChecked(opts.get("peri_hazard", True))
-            view.peri_drug_checkbox.setChecked(opts.get("export_peri_drug", True))
+            view.peri_drug_checkbox.setChecked(
+                opts.get("export_peri_drug", True))
 
             theme = settings.get("theme", "light")
             if theme == "dark":
@@ -419,7 +438,7 @@ class GUIController:
         found_files: dict[str, Path],
         dropdown: Any,
         log_widget: QTextEdit,
-    ) -> None:
+    ) -> float | None:
         label_path: Path | None = None
         for fname in KS_LABEL_FILES:
             if fname in found_files:
@@ -428,7 +447,7 @@ class GUIController:
 
         if label_path is None:
             log_widget.append("No label file found to populate dropdown.")
-            return
+            return None
 
         try:
             labels_array, _ = create_label_lookup(label_path)
@@ -441,6 +460,11 @@ class GUIController:
             log_widget.append("Loaded labels into dropdown.")
         except Exception as e:
             log_widget.append(f"Error loading cluster labels: {e}")
+
+        max_time: float | None = None
+        if "spike_times.npy" in found_files:
+            max_time = get_recording_duration(found_files["spike_times.npy"])
+        return max_time
 
     def run_analysis(
         self,
@@ -474,7 +498,8 @@ class GUIController:
             return
 
         try:
-            file_paths = validate_ks_folder(folder_path, KS_REQUIRED, KS_LABEL_FILES)
+            file_paths = validate_ks_folder(
+                folder_path, KS_REQUIRED, KS_LABEL_FILES)
         except FileNotFoundError as e:
             log.append(str(e))
             return
@@ -531,7 +556,8 @@ class GUIController:
             # Case-insensitive label matching
             labels_lower = [lbl.lower() for lbl in labels]
             standard_labels = {"good", "mua", "noise"}
-            has_cluster_info = any("cluster_info.tsv" in m for m in tmp_label_log)
+            has_cluster_info = any(
+                "cluster_info.tsv" in m for m in tmp_label_log)
             for lbl in labels_lower:
                 if lbl not in standard_labels and not has_cluster_info:
                     log.append(
@@ -540,24 +566,30 @@ class GUIController:
                     )
 
             label_ids = (
-                tmp_df[tmp_df["group"].str.lower().isin(labels_lower)]["spike_clusters"]
+                tmp_df[tmp_df["group"].str.lower().isin(labels_lower)
+                       ]["spike_clusters"]
                 .unique().tolist()
             )
-            cluster_ids = sorted(set(cluster_ids) | {int(c) for c in label_ids})
-            end_time_val = _parse_float(end, default=float(max_time_tmp)) or float(max_time_tmp)
+            cluster_ids = sorted(set(cluster_ids) | {
+                                 int(c) for c in label_ids})
+            end_time_val = _parse_float(end, default=float(
+                max_time_tmp)) or float(max_time_tmp)
             log.append(f"  → cluster IDs: {cluster_ids}")
         else:
             # Still need max_time for end_time default — load it lightly
             import numpy as np
             raw_st = np.load(str(file_paths["spike_times.npy"])).ravel()
             max_time_tmp = float(raw_st[-1] / 30000.0) if raw_st.size else 0.0
-            end_time_val = _parse_float(end, default=max_time_tmp) or max_time_tmp
+            end_time_val = _parse_float(
+                end, default=max_time_tmp) or max_time_tmp
 
         plot_events: list[dict[str, Any]] = list(drug_events)
         if cck_time is not None:
-            plot_events.append({"name": "CCK", "start": float(cck_time), "end": None})
+            plot_events.append(
+                {"name": "CCK", "start": float(cck_time), "end": None})
         if pe_time is not None:
-            plot_events.append({"name": "PE", "start": float(pe_time), "end": None})
+            plot_events.append(
+                {"name": "PE", "start": float(pe_time), "end": None})
 
         active_drug_events = [
             ev for ev in drug_events
