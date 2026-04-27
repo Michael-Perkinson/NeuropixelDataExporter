@@ -482,8 +482,8 @@ class MainWindow(QMainWindow):  # type: ignore[misc]
 
         max_time = self.controller.try_populate_label_dropdown(
             found_files, self.cluster_dropdown, self.log_output)
-        if max_time is not None and not self.end_time_input.text().strip():
-            self.end_time_input.setText(f"{max_time} (max)")
+        if max_time is not None:
+            self.end_time_input.setPlaceholderText(f"{max_time} s (max)")
 
     def _on_label_selected(self, index: int) -> None:
         if index == 0:
