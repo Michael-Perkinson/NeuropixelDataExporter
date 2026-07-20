@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING
-from PySide6.QtWidgets import QMainWindow, QLabel, QWidget, QVBoxLayout
+from PySide6.QtWidgets import QLabel, QWidget, QVBoxLayout
 from PySide6.QtCore import Qt
 import qdarkstyle
 

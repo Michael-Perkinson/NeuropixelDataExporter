@@ -13,7 +13,6 @@ from src.core.file_manager import (
     make_specific_folder,
     KS_REQUIRED,
     KS_LABEL_FILES,
-    SAMPLE_RATE,
 )
 
 # --- Test for find_specific_files_in_folder --- #
