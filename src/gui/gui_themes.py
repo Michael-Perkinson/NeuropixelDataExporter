@@ -1,12 +1,17 @@
 # gui_themes.py
 
-from typing import Any
+from __future__ import annotations
+
+from typing import Any, TYPE_CHECKING
 from PySide6.QtWidgets import QMainWindow, QLabel, QWidget, QVBoxLayout
 from PySide6.QtCore import Qt
 import qdarkstyle
 
+if TYPE_CHECKING:
+    from src.gui.view import MainWindow
 
-def _toggle_theme(main_window: QMainWindow) -> None:
+
+def _toggle_theme(main_window: MainWindow) -> None:
     if main_window.dark_mode:
         main_window.setStyleSheet(_light_theme())
     else:
@@ -215,7 +220,7 @@ def make_help_icon(text: str) -> QWidget:
     icon.setStyleSheet(help_icon_style())
     icon.setToolTip(text)
     icon.setFixedWidth(12)
-    icon.setAlignment(Qt.AlignCenter)
+    icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
     wrapper = QWidget()
     layout = QVBoxLayout()

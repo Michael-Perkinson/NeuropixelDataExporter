@@ -3,7 +3,7 @@ import logging
 import math
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import QFileDialog, QMessageBox, QTextEdit, QWidget
@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox, QTextEdit, QWidget
 from src.core.cck_analysis import analyse_cck_response, analyse_pe_response
 from src.core.file_manager import KS_LABEL_FILES, KS_REQUIRED, create_label_lookup, get_recording_duration, validate_ks_folder
 from src.core.firing_rate import process_cluster_data
-from src.core.input_parser import parse_channels_or_labels, validate_and_parse_drug_event
+from src.core.input_parser import ParseError, parse_channels_or_labels, validate_and_parse_drug_event
 from src.core.interactive_plot import export_firing_rate_html
 from src.core.isi_hazard import calculate_hazard_function, calculate_isi_histogram, calculate_windowed_isi
 from src.core.results_writer import _cluster_label_map, export_data, export_hazard_excel
@@ -174,7 +174,7 @@ class AnalysisWorker(QThread):
             early_label = f"{self.early_hazard_start:.0f}–{early_end:.0f}s"
 
             # Per-drug pre/post hazard epochs (1 bin before onset; 1 bin at end of drug)
-            peri_epochs: list[dict] = []
+            peri_epochs: list[dict[str, Any]] = []
             if self.peri_hazard:
                 for ev in self.active_drug_events:
                     onset = float(ev["start"])
@@ -248,7 +248,7 @@ class AnalysisWorker(QThread):
                 firing_rate_df,
                 images_dir,
                 self.bin_size,
-                resolved_events,
+                [{"name": ev["name"], "start": ev["start"], "end": ev.get("end")} for ev in resolved_events],
             )
         else:
             log("Skipping interactive plots (disabled or no data).")
@@ -319,10 +319,12 @@ class GUIController:
         try:
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(settings, f, indent=4)
-            QMessageBox.information(
-                parent, "Export Successful", "Settings saved.")
+            if parent is not None:
+                QMessageBox.information(
+                    parent, "Export Successful", "Settings saved.")
         except Exception as e:
-            QMessageBox.critical(parent, "Export Failed", str(e))
+            if parent is not None:
+                QMessageBox.critical(parent, "Export Failed", str(e))
 
     def import_user_settings(self, parent: QWidget | None) -> None:
         if self.view is None:
@@ -338,8 +340,9 @@ class GUIController:
             with open(file_path, "r", encoding="utf-8") as f:
                 settings = json.load(f)
         except Exception as e:
-            QMessageBox.critical(parent, "Import Failed",
-                                 f"Error reading settings file:\n{e}")
+            if parent is not None:
+                QMessageBox.critical(parent, "Import Failed",
+                                     f"Error reading settings file:\n{e}")
             return
 
         view = self.view
@@ -365,11 +368,13 @@ class GUIController:
                 view.setStyleSheet(_light_theme())
                 view.dark_mode = False
 
-            QMessageBox.information(
-                parent, "Import Successful", "Settings loaded.")
+            if parent is not None:
+                QMessageBox.information(
+                    parent, "Import Successful", "Settings loaded.")
         except Exception as e:
-            QMessageBox.critical(parent, "Import Failed",
-                                 f"Error applying settings:\n{e}")
+            if parent is not None:
+                QMessageBox.critical(parent, "Import Failed",
+                                     f"Error applying settings:\n{e}")
 
     def load_temp_settings(self) -> None:
         view = self.view
@@ -538,7 +543,7 @@ class GUIController:
         # end_time resolved after data load in the worker; pass raw string
         parsed = parse_channels_or_labels(clusters)
         if "error" in parsed:
-            log.append(f"Input error: {parsed['error']}")
+            log.append(f"Input error: {cast(ParseError, parsed)['error']}")
             return
 
         cluster_ids: list[int] = parsed["channels"]
