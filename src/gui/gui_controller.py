@@ -1,4 +1,5 @@
 import json
+import logging
 import math
 import sys
 from pathlib import Path
@@ -16,6 +17,8 @@ from src.core.isi_hazard import calculate_hazard_function, calculate_isi_histogr
 from src.core.results_writer import _cluster_label_map, export_data, export_hazard_excel
 from src.gui.gui_themes import _dark_theme, _light_theme
 from src.gui.view import MainWindow
+
+logger = logging.getLogger(__name__)
 
 
 class AnalysisWorker(QThread):
@@ -411,7 +414,7 @@ class GUIController:
                     self.last_browse_dir = p
 
         except Exception as e:
-            print(f"[Warning] Could not load temp settings: {e}")
+            logger.warning("Could not load temp settings: %s", e)
 
     def save_temp_settings(self) -> None:
         if self.view is None:
@@ -422,7 +425,7 @@ class GUIController:
             with open(TEMP_SETTINGS_PATH, "w", encoding="utf-8") as f:
                 json.dump(settings, f, indent=4)
         except Exception as e:
-            print(f"[Warning] Could not save temp settings: {e}")
+            logger.warning("Could not save temp settings: %s", e)
 
     def add_drug_event(
         self,

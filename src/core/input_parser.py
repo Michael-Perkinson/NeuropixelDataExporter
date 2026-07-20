@@ -67,8 +67,8 @@ def validate_and_parse_drug_event(
 
     try:
         start = float(start_text)
-    except Exception:
-        raise ValueError("Invalid or missing start time.")
+    except Exception as e:
+        raise ValueError("Invalid or missing start time.") from e
 
     end: float | None
     if end_text.strip():
@@ -78,8 +78,8 @@ def validate_and_parse_drug_event(
         else:
             try:
                 end = float(end_text)
-            except Exception:
-                raise ValueError("End time must be a number or 'max'.")
+            except Exception as e:
+                raise ValueError("End time must be a number or 'max'.") from e
             if end < start:
                 raise ValueError(
                     "End time must be greater than or equal to start time.")
@@ -103,9 +103,9 @@ def validate_and_parse_drug_event(
                 post_val = float(post_str)
             else:
                 pre_val = post_val = float(peri_drug)
-        except Exception:
+        except Exception as e:
             raise ValueError(
-                "Peri-drug time must be a number or pre/post pair (e.g. 600 or 300/900).")
+                "Peri-drug time must be a number or pre/post pair (e.g. 600 or 300/900).") from e
 
         result["start_offset"] = max(0.0, start - pre_val)
         result["end_offset"] = (
