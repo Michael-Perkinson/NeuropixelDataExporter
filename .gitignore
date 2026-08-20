@@ -173,8 +173,15 @@ pytest.ini
 requirements2.txt
 .vscode/settings.json
 
+archive/
+
 # GUI session state
 src/gui/.neuropixel_gui_last_session.json
 
 # Claude Code local config
 .claude/
+
+# Local agent setup and issue tracker
+AGENTS.md
+docs/agents/
+.scratch/

@@ -124,14 +124,14 @@ NeuropixelDataExporter/
    ```bash
    conda create -n export_env python=3.11
    conda activate export_env
-   pip install -r requirements.txt
+   python -m pip install .
    ```
 
    **Standard venv (Windows):**
    ```bash
    python -m venv export_env
    export_env\Scripts\activate
-   pip install -r requirements.txt
+   python -m pip install .
    ```
 
 3. **Run the application**
@@ -140,7 +140,7 @@ NeuropixelDataExporter/
    python main.py
    ```
 
-> **Note:** If you pull a new version, always re-run `pip install -r requirements.txt` inside your activated environment to pick up any new dependencies.
+> **Note:** If you pull a new version, always re-run `python -m pip install .` inside your activated environment to pick up any new dependencies.
 
 ---
 
@@ -258,7 +258,7 @@ Baseline stability categories (applied to both protocols):
 
 ## Dependencies
 
-See `requirements.txt`. Key packages:
+Dependencies are declared in `pyproject.toml`. Key packages:
 
 | Package | Purpose |
 |---|---|
