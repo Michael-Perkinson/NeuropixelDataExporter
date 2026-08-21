@@ -1,8 +1,11 @@
+import logging
 from typing import Sequence, Final
 from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 # Always required from Kilosort output
 KS_REQUIRED: Final[Sequence[str]] = (
@@ -22,8 +25,10 @@ def get_recording_duration(spike_times_path: str | Path) -> float | None:
         raw = np.load(str(spike_times_path)).ravel()
         if raw.size:
             return round(float(raw[-1]) / SAMPLE_RATE, 2)
-    except Exception:
+    except (FileNotFoundError, OSError):
         pass
+    except Exception:
+        logger.exception("Failed to get recording duration from %s", spike_times_path)
     return None
 
 

@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 
 
-def _assert_monotonic_nonnegative(spikes_sec: np.ndarray, *, cluster_id: int | str) -> np.ndarray:
+def _assert_monotonic_nonnegative(spikes_sec: NDArray[np.float64], *, cluster_id: int | str) -> NDArray[np.float64]:
     """Ensure spike times are non-negative and sorted in ascending order."""
     if spikes_sec.size == 0:
         return spikes_sec
@@ -16,7 +17,7 @@ def _assert_monotonic_nonnegative(spikes_sec: np.ndarray, *, cluster_id: int | s
 
 
 def calculate_windowed_isi(
-    data_export: dict[int, np.ndarray],
+    data_export: dict[int, NDArray[np.float64]],
     window_start: float,
     window_end: float,
     time_bin: float = 0.01,
@@ -33,7 +34,7 @@ def calculate_windowed_isi(
 
     n_bins = int(max_isi_time / time_bin)
     bin_edges = np.arange(0, (n_bins + 1) * time_bin, time_bin)
-    data: dict[str, np.ndarray] = {"Bin_Starts": bin_edges[:-1]}
+    data: dict[str, NDArray[np.float64]] = {"Bin_Starts": bin_edges[:-1]}
 
     for cid, spikes_ms in data_export.items():
         spikes_s = _assert_monotonic_nonnegative(
@@ -48,7 +49,7 @@ def calculate_windowed_isi(
 
 
 def calculate_isi_histogram(
-    data_export: dict[int, np.ndarray],
+    data_export: dict[int, NDArray[np.float64]],
     baseline_start: float | None = None,
     baseline_end: float | None = None,
     time_bin: float = 0.01,
@@ -66,13 +67,13 @@ def calculate_isi_histogram(
     if baseline_start is not None and baseline_end is not None and baseline_start > baseline_end:
         raise ValueError("baseline_start must be <= baseline_end")
 
-    baseline_data: dict[int, np.ndarray] | None = (
+    baseline_data: dict[int, NDArray[np.float64]] | None = (
         {} if baseline_start is not None and baseline_end is not None else None
     )
 
     n_bins = int(max_isi_time / time_bin)
     bin_edges = np.arange(0, (n_bins + 1) * time_bin, time_bin)
-    isi_data: dict[str, np.ndarray] = {"Bin_Starts": bin_edges[:-1]}
+    isi_data: dict[str, NDArray[np.float64]] = {"Bin_Starts": bin_edges[:-1]}
 
     for channel, spikes in data_export.items():
         spikes_sec = _assert_monotonic_nonnegative(
@@ -105,9 +106,9 @@ def calculate_isi_histogram(
     return isi_df, baseline_isi_df
 
 
-def compute_hazard_values(isi_df: pd.DataFrame, bin_starts: np.ndarray) -> pd.DataFrame:
+def compute_hazard_values(isi_df: pd.DataFrame, bin_starts: NDArray[np.float64]) -> pd.DataFrame:
     """Compute hazard function values from an ISI histogram DataFrame."""
-    hazard_data: dict[str, np.ndarray] = {"Bin_Starts": bin_starts}
+    hazard_data: dict[str, NDArray[np.float64]] = {"Bin_Starts": bin_starts}
     for channel in isi_df.columns:
         if channel == "Bin_Starts":
             continue
@@ -126,7 +127,7 @@ def compute_hazard_values(isi_df: pd.DataFrame, bin_starts: np.ndarray) -> pd.Da
 
 def compute_hazard_summary(
     hazard_df: pd.DataFrame,
-    bin_starts: np.ndarray,
+    bin_starts: NDArray[np.float64],
     early_time: float,
     late_time_start: float,
     late_time_end: float,

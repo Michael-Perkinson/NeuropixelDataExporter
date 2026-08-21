@@ -38,7 +38,7 @@ class DrugEvent(TypedDict):
     post_time: float | None
 
 
-class MainWindow(QMainWindow):  # type: ignore[misc]
+class MainWindow(QMainWindow):
     MIN_W, MIN_H = 1080, 720
 
     def __init__(self, controller: Any) -> None:
