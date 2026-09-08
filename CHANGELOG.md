@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Correct the hazard probability at the last occupied ISI histogram bin.
+- Reject CCK/PE classification runs before export when either protocol window falls outside the recording or analysis window, rather than classifying missing time as zero firing.
+- Retain selected silent clusters in firing-rate exports and label averages; write the advertised `Mean_by_Label` sheet even without peri-drug events.
+- Calculate full-recording and early-reference ISI/hazard from recording-wide spike data, independently of the firing-rate analysis window.
+- Generate peri-drug hazard for drug events without requiring a peri-drug firing-rate window or enabling Peri-drug Sheets.
+- Sanitize drug worksheet names and disambiguate duplicate, case-insensitive, and truncated names so events cannot overwrite each other's sheets. Guide sheets use the same resolved names.
+
+### Documentation
+
+- Clarify that exports reuse `analysis_results/`; existing filenames are replaced and outputs disabled on subsequent runs remain from earlier runs. Output-folder behavior and ordinary worksheet names are unchanged.
+
+
 ## [2.0.7] - 2026-04-09
 
 - **PE_Cell_Typing conflict annotation**: when both CCK and PE protocols are run and their classifications disagree for a cluster, the PE Notes column now includes a conflict note (e.g. `Conflicts with CCK: Putative Vasopressin`). This makes it easy to spot neurons where the two protocols give different answers. If the cluster already has a baseline stability note, the conflict is appended after a semicolon.

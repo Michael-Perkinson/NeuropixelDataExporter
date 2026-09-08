@@ -118,7 +118,7 @@ def compute_hazard_values(isi_df: pd.DataFrame, bin_starts: NDArray[np.float64])
         hazard_values = np.divide(
             counts,
             np.maximum(total_spikes - cumsum_counts + counts, 1),
-            where=(cumsum_counts < total_spikes),
+            where=(total_spikes - cumsum_counts + counts > 0),
             out=np.zeros_like(counts, dtype=float),
         )
         hazard_data[channel] = hazard_values

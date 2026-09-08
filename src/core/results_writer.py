@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,23 @@ from src.core.firing_rate import (
     create_firing_rate_dataframes,
 )
 from src.core.file_manager import make_output_folders
+
+
+def _sheet_events(events: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    """Assign Excel-safe, distinct drug stems without changing display names."""
+    used: set[str] = set()
+    result = []
+    for event in events:
+        base = re.sub(r"[\[\]:*?/\\']", "_", event["name"]).replace(" ", "_") or "Drug"
+        stem = base[:limit]
+        number = 2
+        while stem.lower() in used or (stem + "_Delta").lower() in used:
+            suffix = f"_{number}"
+            stem = base[:limit - len(suffix)] + suffix
+            number += 1
+        used.update((stem.lower(), (stem + "_Delta").lower()))
+        result.append({**event, "_sheet_stem": stem})
+    return result
 
 
 def _cluster_label_map(
@@ -298,7 +316,7 @@ def export_data(
         data_folder_path)
 
     filtered_export: dict[int, NDArray[np.float64]] = {
-        cid: arr for cid, arr in data_export.items() if arr.size > 0
+        cid: arr for cid, arr in data_export.items()
     }
     if not filtered_export:
         return export_dir, images_dir, None
@@ -327,6 +345,7 @@ def export_data(
     if df_raw.empty:
         return export_dir, images_dir, None
 
+    drug_events = _sheet_events(drug_events or [], 20)
     label_map = _cluster_label_map(cck_df, pe_df)
     has_baseline = (
         export_delta_from_baseline
@@ -411,7 +430,7 @@ def export_data(
             if trunc:
                 peri_warnings.append(trunc)
 
-            safe_name = ev["name"].replace(" ", "_")[:20]
+            safe_name = ev["_sheet_stem"]
             peri_df.to_excel(writer, sheet_name=f"Peri_{safe_name}"[
                              :31], index=False)
 
@@ -484,7 +503,8 @@ def export_data(
             pe_df is not None and not pe_df.empty,
             has_baseline,
             drug_events or [],
-            cluster_group_map is not None and bool(all_drug_means),
+            bool(cluster_group_map),
+            bool(all_drug_means),
         )
         guide_df.to_excel(writer, sheet_name="Sheet_Guide", index=False)
 
@@ -505,6 +525,15 @@ def export_data(
             key=lambda ws: (0 if ws.name == "Sheet_Guide" else 1 if ws.name == "Summary" else 2)
         )
 
+        if cluster_group_map:
+            means = pd.DataFrame({"Time Intervals (s)": df_raw["Time Intervals (s)"]})
+            for label in sorted(set(cluster_group_map.values())):
+                cols = [f"Cluster_{cid}" for cid, group in cluster_group_map.items()
+                        if group == label and f"Cluster_{cid}" in df_raw]
+                if cols:
+                    means[f"Mean_{label}_Hz"] = df_raw[cols].mean(axis=1)
+            means.to_excel(writer, sheet_name="Mean_by_Label", index=False)
+
         # Binned_Firing_Rates is always the last sheet
         df_raw_renamed = _rename_cluster_columns(df_raw, label_map)
         df_raw_renamed.to_excel(
@@ -523,6 +552,7 @@ def _build_fr_guide_sheet(
     has_baseline: bool,
     drug_events: list[dict[str, Any]],
     has_mean_label: bool,
+    has_mean_peri: bool = False,
 ) -> pd.DataFrame:
     """Build a Sheet_Guide tab describing every sheet in the firing-rate workbook."""
     rows: list[dict[str, str]] = []
@@ -553,7 +583,7 @@ def _build_fr_guide_sheet(
         post_abs = ev.get("post_time")
         if pre_abs is None and post_abs is None:
             continue
-        safe = ev["name"].replace(" ", "_")[:20]
+        safe = ev["_sheet_stem"]
         onset = float(ev["start"])
         pre_f = float(pre_abs) if pre_abs is not None else onset
         post_f = float(post_abs) if post_abs is not None else onset
@@ -564,9 +594,10 @@ def _build_fr_guide_sheet(
             _add(f"Peri-Drug: {ev['name']}", f"Peri_{safe}_Delta",
                  f"Change in firing rate from baseline over the same peri-drug window; {window}")
 
-    if has_mean_label:
+    if has_mean_peri:
         _add("Mean by Label", "Mean_by_Label_Peri",
              "All peri-drug windows combined; firing rates averaged by Phy group label; each drug block separated by a header row")
+    if has_mean_label:
         _add("Mean by Label", "Mean_by_Label",
              "Full-recording firing rates averaged per Phy group label")
 
@@ -611,7 +642,7 @@ def _build_hazard_summary_sheet(
 
     for epoch in peri_epochs:
         name = epoch["name"]
-        safe = name.replace(" ", "_")[:14]
+        safe = epoch["_sheet_stem"]
         pre_s = epoch.get("pre_win_start", "?")
         pre_e = epoch.get("pre_win_end", "?")
         _add(
@@ -678,7 +709,7 @@ def export_hazard_excel(
       <Drug>_EndDrug_ISI / _Hazard / _HazSumm  — 1 bin at end of drug (if applicable)
     """
     lm = label_map or {}
-    epochs = peri_epochs or []
+    epochs = _sheet_events(peri_epochs or [], 14)
 
     def _rename_summary(df: pd.DataFrame) -> pd.DataFrame:
         """Remap values in the 'Cluster' column using label_map."""
@@ -718,7 +749,7 @@ def export_hazard_excel(
                 writer, sheet_name="Early_Hazard_Summary", index=False)
 
         for epoch in epochs:
-            safe = epoch["name"].replace(" ", "_")[:14]
+            safe = epoch["_sheet_stem"]
 
             # Pre-drug (1 bin before onset)
             pre_isi = _rename_cluster_columns(epoch["pre_isi_df"], lm)

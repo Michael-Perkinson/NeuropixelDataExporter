@@ -160,7 +160,7 @@ Click **Browse** and navigate to your Kilosort output folder. The app will valid
 **Cell Typing tabs:**
 - Enter the CCK injection time (seconds) in the CCK tab to run the OT/VP classification protocol
 - Enter the PE injection time in the PE tab to run the PE protocol
-- Both are optional and independent; leave blank to skip
+- Both are optional and independent; leave blank to skip. Each protocol requires its complete pre/post window within both the recording and the analysis window; incomplete windows are rejected before export
 
 **Output Options (left column, bottom):**
 Tick the outputs you want. All are on by default.
@@ -181,7 +181,7 @@ Click **Run Analysis**. Progress appears in the log at the bottom. The button di
 
 ## Outputs
 
-All output is saved to a timestamped folder inside your data folder.
+All output is saved to `analysis_results/` inside your data folder. Re-running replaces files with matching names; outputs disabled on a later run remain from the earlier run. Copy the folder elsewhere before re-running if you need to retain a complete previous export.
 
 ### `firing_rates_by_cluster.xlsx`
 

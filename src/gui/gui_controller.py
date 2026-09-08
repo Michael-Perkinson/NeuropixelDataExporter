@@ -8,7 +8,7 @@ from typing import Any, cast
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import QFileDialog, QMessageBox, QTextEdit, QWidget
 
-from src.core.cck_analysis import analyse_cck_response, analyse_pe_response
+from src.core.cck_analysis import CCK_WINDOW_S, PE_WINDOW_S, analyse_cck_response, analyse_pe_response
 from src.core.file_manager import KS_LABEL_FILES, KS_REQUIRED, create_label_lookup, get_recording_duration, validate_ks_folder
 from src.core.firing_rate import process_cluster_data
 from src.core.input_parser import ParseError, parse_channels_or_labels, validate_and_parse_drug_event
@@ -49,6 +49,7 @@ class AnalysisWorker(QThread):
         mean_label_data: bool,
         plot_events: list[dict[str, Any]],
         active_drug_events: list[dict[str, Any]],
+        hazard_drug_events: list[dict[str, Any]] | None = None,
     ) -> None:
         super().__init__()
         self.file_paths = file_paths
@@ -71,6 +72,7 @@ class AnalysisWorker(QThread):
         self.mean_label_data = mean_label_data
         self.plot_events = plot_events
         self.active_drug_events = active_drug_events
+        self.hazard_drug_events = hazard_drug_events if hazard_drug_events is not None else active_drug_events
 
     def run(self) -> None:
         try:
@@ -86,10 +88,20 @@ class AnalysisWorker(QThread):
 
         log("Loading spike data...")
         from src.core.spike_filter import prepare_filtered_data
-        recording_dataframe, _, label_log = prepare_filtered_data(
+        recording_dataframe, recording_end, label_log = prepare_filtered_data(
             self.file_paths)
         for msg in label_log:
             log(msg)
+
+        for protocol, onset, window in (("CCK", self.cck_time, CCK_WINDOW_S),
+                                        ("PE", self.pe_time, PE_WINDOW_S)):
+            if onset is not None and (
+                not math.isfinite(onset)
+                or onset - window < max(0.0, self.start_time)
+                or onset + window > min(self.end_time, recording_end)
+            ):
+                raise ValueError(f"{protocol} requires a full {window:g}s pre/post window "
+                                 "within the recording and analysis window.")
 
         # Resolve label-based clusters from the loaded dataframe
         cluster_ids = self.cluster_ids
@@ -116,23 +128,11 @@ class AnalysisWorker(QThread):
 
         cck_df = None
         if self.cck_time is not None:
-            cck_pre_start = self.cck_time - 300.0
-            cck_post_end = self.cck_time + 300.0
-            if self.start_time > cck_pre_start:
-                log(f"⚠ Warning: analysis start ({self.start_time:.1f}s) is after CCK pre-window start ({cck_pre_start:.1f}s). Bins may be clipped.")
-            if self.end_time < cck_post_end:
-                log(f"⚠ Warning: analysis end ({self.end_time:.1f}s) is before CCK post-window end ({cck_post_end:.1f}s). Bins may be clipped.")
             log("Running CCK cell-type classification...")
             cck_df = analyse_cck_response(raw_fr_dict, self.cck_time)
 
         pe_df = None
         if self.pe_time is not None:
-            pe_pre_start = self.pe_time - 60.0
-            pe_post_end = self.pe_time + 60.0
-            if self.start_time > pe_pre_start:
-                log(f"⚠ Warning: analysis start ({self.start_time:.1f}s) is after PE pre-window start ({pe_pre_start:.1f}s). Bins may be clipped.")
-            if self.end_time < pe_post_end:
-                log(f"⚠ Warning: analysis end ({self.end_time:.1f}s) is before PE post-window end ({pe_post_end:.1f}s). Bins may be clipped.")
             log("Running PE cell-type classification...")
             pe_df = analyse_pe_response(raw_fr_dict, self.pe_time)
 
@@ -160,15 +160,19 @@ class AnalysisWorker(QThread):
         if self.run_hazard:
             log("Calculating ISI histograms and hazard functions...")
 
+            hazard_spikes, _ = process_cluster_data(
+                recording_dataframe, cluster_ids, 0.0, recording_end,
+                drug_time=None, baseline_start=None, baseline_end=None,
+            )
             # Full-recording ISI + hazard
-            isi_df, _ = calculate_isi_histogram(raw_fr_dict)
+            isi_df, _ = calculate_isi_histogram(hazard_spikes)
             hazard_df, hazard_summary_df, _, _ = calculate_hazard_function(
                 isi_df)
 
             # Early-recording window ISI + hazard
-            early_end = min(self.early_hazard_end, self.end_time)
+            early_end = min(self.early_hazard_end, recording_end)
             early_isi_df = calculate_windowed_isi(
-                raw_fr_dict, self.early_hazard_start, early_end)
+                hazard_spikes, self.early_hazard_start, early_end)
             early_hazard_df, early_hazard_summary_df, _, _ = calculate_hazard_function(
                 early_isi_df)
             early_label = f"{self.early_hazard_start:.0f}–{early_end:.0f}s"
@@ -176,7 +180,7 @@ class AnalysisWorker(QThread):
             # Per-drug pre/post hazard epochs (1 bin before onset; 1 bin at end of drug)
             peri_epochs: list[dict[str, Any]] = []
             if self.peri_hazard:
-                for ev in self.active_drug_events:
+                for ev in self.hazard_drug_events:
                     onset = float(ev["start"])
                     drug_end_raw = ev.get("end")
 
@@ -185,7 +189,7 @@ class AnalysisWorker(QThread):
                     pre_win_end = onset
 
                     pre_isi = calculate_windowed_isi(
-                        raw_fr_dict, pre_win_start, pre_win_end, col_suffix="_PreDrug")
+                        hazard_spikes, pre_win_start, pre_win_end, col_suffix="_PreDrug")
                     pre_haz, pre_haz_summary, _, _ = calculate_hazard_function(
                         pre_isi)
 
@@ -201,14 +205,14 @@ class AnalysisWorker(QThread):
                     # 1 bin at the end of drug application (only if drug has an end time)
                     if drug_end_raw is not None:
                         import math as _math
-                        drug_end_f = self.end_time if _math.isinf(
+                        drug_end_f = recording_end if _math.isinf(
                             float(drug_end_raw)) else float(drug_end_raw)
-                        drug_end_f = min(drug_end_f, self.end_time)
+                        drug_end_f = min(drug_end_f, recording_end)
                         end_win_start = max(0.0, drug_end_f - self.bin_size)
                         end_win_end = drug_end_f
 
                         end_isi = calculate_windowed_isi(
-                            raw_fr_dict, end_win_start, end_win_end, col_suffix="_EndDrug")
+                            hazard_spikes, end_win_start, end_win_end, col_suffix="_EndDrug")
                         end_haz, end_haz_summary, _, _ = calculate_hazard_function(
                             end_isi)
 
@@ -626,6 +630,7 @@ class GUIController:
             mean_label_data=mean_label_data,
             plot_events=plot_events,
             active_drug_events=active_drug_events,
+            hazard_drug_events=drug_events,
         )
         self._worker.log_message.connect(log.append)
 
