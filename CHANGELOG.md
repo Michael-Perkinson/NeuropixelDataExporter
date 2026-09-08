@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Install the Linux Qt EGL runtime in CI so analysis-worker regression tests can import PySide6 on Ubuntu runners.
+- Declare the existing Ruff rule selection explicitly so upgrades do not silently expand the CI lint checks.
 - Correct the hazard probability at the last occupied ISI histogram bin.
 - Reject CCK/PE classification runs before export when either protocol window falls outside the recording or analysis window, rather than classifying missing time as zero firing.
 - Retain selected silent clusters in firing-rate exports and label averages; write the advertised `Mean_by_Label` sheet even without peri-drug events.
